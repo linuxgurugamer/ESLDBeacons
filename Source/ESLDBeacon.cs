@@ -15,7 +15,7 @@ namespace ESLDCore
 
         // Per-beacon G limit.
         [KSPField(isPersistant=true, guiActive=false)]
-        public double gLimit = 2;
+        public float gLimit = 0.5f;
 
         // Activated state.
         [KSPField(isPersistant = true, guiActive = false)]
@@ -26,8 +26,37 @@ namespace ESLDCore
         public double fuelOnBoard = 0;
 
         // Beacon model (from part config).
+        // Can be any string, but overrides cost parameters when equal to one of the original 4 models.
         [KSPField(isPersistant = true, guiActive = false)]
-        public string beaconModel;
+        public string beaconModel = string.Empty;
+
+        // Cost equation:
+        // M=tonnage, D=tripdist, f=massFctr, e=massExp, c=coef, p=distPow, b=baseMult, l=yardstick, d=2 if D>distpenalty
+        // COST = M*b + M^(1+f*M^e+d) * (D/sqrt(l))^(1/2^p) * c
+
+        // Cost parameter (from part config). Coefficient for total cost. (Does not affect base cost)
+        [KSPField(isPersistant = false, guiActive = false)]
+        public float coef = 0.01f;
+
+        // Cost parameter (from part config). Coefficient for mass exponent.
+        [KSPField(isPersistant = false, guiActive = false)]
+        public float massFctr = 0.0002f;
+
+        // Cost parameter (from part config). Second exponent of mass. (M^(1+f*M^e))
+        [KSPField(isPersistant = false, guiActive = false)]
+        public float massExp = 1f;
+
+        // Cost parameter (from part config). Root order of distance cost. (tripdist^(1/(2^distPow)))
+        [KSPField(isPersistant = false, guiActive = false)]
+        public int distPow = 1;
+
+        // Cost parameter (from part config). Coefficient for base cost from mass.
+        [KSPField(isPersistant = false, guiActive = false)]
+        public float baseMult = 0.25f;
+
+        // Cost parameter (from part config). Distance beyond which cost becomes prohibitive. (Zero for infinite)
+        [KSPField(isPersistant = false, guiActive = false)]
+        public int distpenalty = 0;
 
         // Self-reported binary techbox capability.  
         [KSPField(isPersistant = true, guiActive = false)]
@@ -131,19 +160,16 @@ namespace ESLDCore
             switch (beaconModel)
             {
                 case "LB10":
-                    gLimit = 1.0;
+                    gLimit = 1.0f;
                     break;
                 case "LB15":
-                    gLimit = 0.5;
+                    gLimit = 0.5f;
                     break;
                 case "LB100":
-                    gLimit = 0.1;
+                    gLimit = 0.1f;
                     break;
                 case "IB1":
-                    gLimit = 0.1;
-                    break;
-                default:
-                    gLimit = 0.1;
+                    gLimit = 0.1f;
                     break;
             }
             double neededMult = 10;
@@ -151,7 +177,7 @@ namespace ESLDCore
             double baseLimit = gLimit;
             if (hasGMU)
             {
-                gLimit *= 1.25;
+                gLimit *= 1.25f;
                 neededMult = 15;
                 constantDiv = 5;
                 double massOffset = (Math.Pow(Math.Abs(Math.Log(vessel.GetTotalMass() / 10, 2.25)), 4) * baseLimit) / 1500;
@@ -162,7 +188,7 @@ namespace ESLDCore
                 }
             }
             double limbo = (Math.Sqrt((6.673E-11 * targetbody.Mass) / gLimit) - targetbody.Radius) * massBonus;
-            gLimit = (6.673E-11 * targetbody.Mass) / Math.Pow(limbo + targetbody.Radius, 2);
+            gLimit = Convert.ToSingle((6.673E-11 * targetbody.Mass) / Math.Pow(limbo + targetbody.Radius, 2));
             if (limbo < targetbody.Radius * 0.25) limbo = targetbody.Radius * 0.25;
             neededEC = Math.Round((fuelOnBoard * neededMult * (FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude / baseLimit)) * getCrewBonuses(vessel, "Engineer", 0.5, 5));
             constantEC = Math.Round(fuelOnBoard / constantDiv * (FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude / baseLimit) * 100 * getCrewBonuses(vessel, "Engineer", 0.5, 5)) / 100;

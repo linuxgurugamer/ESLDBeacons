@@ -46,23 +46,52 @@ namespace ESLDCore
         public double nearBeaconRelVel;
 
         // Calculate base cost in units of Karborundum before penalties for a transfer.
-        private double getTripBaseCost(double tripdist, double tonnage, string nbModel)
+        private double getTripBaseCost(double tripdist, double tonnage, string nbModel, float coef=0.01f, float massFctr=0.0002f, float massExp=1f, int distPow=1, float baseMult=0.25f, int distpenalty=0)
         {
-            double yardstick = Math.Sqrt(Math.Sqrt(13599840256));
-            switch (nbModel)
+			double yardstick = Math.Pow (13599840256, 1 / (distPow + 1)); //Math.Sqrt(Math.Sqrt(13599840256));
+			switch (nbModel)
             {
                 case "LB10":
-                    double distpenalty = 0;
-                    if (tripdist > 1000000000) distpenalty = 2;
+                    massFctr = 0.001f;
+                    coef = 0.01057371f;
+                    distPow = 1;
+                    massExp = 1f;
+                    baseMult = 0f;
+                    distpenalty = 0;
+				    if (tripdist > 1000000000) distpenalty = 2;
                     return ((Math.Pow(tonnage, 1 + (.001 * tonnage) + distpenalty) / 10) * ((Math.Sqrt(Math.Sqrt(tripdist * (tripdist / 5E6)))) / yardstick) / tonnage * 10000) * tonnage / 2000;
                 case "LB15":
+                    massFctr = 0.0002f;
+                    coef = 0.001057371f;
+                    distPow = 1;
+                    massExp = 2f;
+                    baseMult = 0.35f;
+                    distpenalty = 0;
                     return (700 + (Math.Pow(tonnage, 1 + (.0002 * Math.Pow(tonnage, 2))) / 10) * ((Math.Sqrt(Math.Sqrt(tripdist * (tripdist / 5E10)))) / yardstick) / tonnage * 10000) * tonnage / 2000;
                 case "LB100":
+                    massFctr = 0.00025f;
+                    coef = 0.88650770f;
+                    distPow = 3;
+                    massExp = 1f;
+                    baseMult = 0.25f;
+                    distpenalty = 0;
                     return (500 + (Math.Pow(tonnage, 1 + (.00025 * tonnage)) / 20) * ((Math.Sqrt(Math.Sqrt(Math.Sqrt(tripdist * 25000)))) / Math.Sqrt(yardstick)) / tonnage * 10000) * tonnage / 2000;
                 case "IB1":
+                    massFctr = 1/6000;
+                    coef = Convert.ToSingle(0.9*Math.Pow((1+tripdist*2E11),1/4));
+                    distPow = 1;
+                    massExp = 1f;
+                    baseMult = 0f;
+                    distpenalty = 0;
                     return ((((Math.Pow(tonnage, 1 + (tonnage / 6000)) * 0.9) / 10) * ((Math.Sqrt(Math.Sqrt(tripdist + 2E11))) / yardstick) / tonnage * 10000) * tonnage / 2000);
-                default:
-                    return 1000;
+            default:
+                    if ((distpenalty>0)&&(tripdist > distpenalty)) {
+                        distpenalty = 2;
+                    } else {
+                        distpenalty = 0;
+                    }
+                    yardstick = Math.Pow (13599840256, 1/Math.Pow(2, distPow + 1)); //Math.Sqrt(Math.Sqrt(13599840256));
+                    return tonnage * baseMult + Math.Pow(tonnage, 1 + massFctr * Math.Pow(tonnage, massExp) + distpenalty) * Math.Pow(tripdist, 1/Math.Pow(2, distPow)) * coef / yardstick;
             }
         }
 
@@ -457,7 +486,7 @@ namespace ESLDCore
                 foreach (KeyValuePair<Vessel, string> ftarg in farTargets)
                 {
                     double tripdist = Vector3d.Distance(nbparent.GetWorldPos3D(), ftarg.Key.GetWorldPos3D());
-                    double tripcost = getTripBaseCost(tripdist, tonnage, nbModel);
+                    double tripcost = getTripBaseCost(tripdist, tonnage, nbModel, nearBeacon.coef, nearBeacon.massFctr, nearBeacon.massExp, nearBeacon.distPow, nearBeacon.baseMult, nearBeacon.distpenalty);
                     double sciBonus = nearBeacon.getCrewBonuses(nbparent, "Scientist", 0.5, 5);
                     if (nearBeacon.hasSCU)
                     {
@@ -563,7 +592,7 @@ namespace ESLDCore
                 double tonnage = vessel.GetTotalMass();
                 Vessel nbparent = nearBeacon.vessel;
                 string nbModel = nearBeacon.beaconModel;
-                double tripcost = getTripBaseCost(tripdist, tonnage, nbModel);
+                double tripcost = getTripBaseCost(tripdist, tonnage, nbModel, nearBeacon.coef, nearBeacon.massFctr, nearBeacon.massExp, nearBeacon.distPow, nearBeacon.baseMult, nearBeacon.distpenalty);
                 double driftpenalty = Math.Pow(Math.Floor(nearBeaconDistance / 200), 2) + Math.Floor(Math.Pow(nearBeaconRelVel, 1.5));
                 if (driftpenalty > 0) GUILayout.Label("+" + driftpenalty + "% due to Drift.");
                 Dictionary<Part, string> HCUParts = getHCUParts(vessel);
@@ -638,8 +667,26 @@ namespace ESLDCore
                         if (pmod.moduleName == "ESLDBeacon" && pmod.moduleValues.GetValue("beaconStatus") == "Active.")
                         {
                             string pmodel = pmod.moduleValues.GetValue("beaconModel");
+                            float pMF; float pcoef; int pdistPow; float pmassExp; float pbaseMult; int pdistpenalty;
+                            if (!float.TryParse (pmod.moduleValues.GetValue ("massFctr"), out pMF))
+                                pMF = 0.0002f;
+                            if (!float.TryParse (pmod.moduleValues.GetValue ("coef"), out pcoef))
+                                pcoef = 0.001f;
+                            if (!int.TryParse (pmod.moduleValues.GetValue ("distPow"), out pdistPow))
+                                pdistPow = 1;
+                            if (!float.TryParse (pmod.moduleValues.GetValue ("massExp"), out pmassExp))
+                                pmassExp = 1f;
+                            if (!float.TryParse (pmod.moduleValues.GetValue ("baseMult"), out pbaseMult))
+                                pbaseMult = 0.25f;
+                            if (!int.TryParse (pmod.moduleValues.GetValue ("distpenalty"), out pdistpenalty))
+                                pdistpenalty = 0;
                             fuelcheck = double.TryParse(pmod.moduleValues.GetValue("fuelOnBoard"), out checkfuel);
-                            if (retTripCost < getTripBaseCost(tripdist, tonnage, pmodel)) retTripCost = getTripBaseCost(tripdist, tonnage, pmodel);
+                            if (retTripCost == 0) {
+                                retTripCost = getTripBaseCost (tripdist, tonnage, pmodel, pcoef, pMF, pmassExp, pdistPow, pbaseMult, pdistpenalty);
+                            } else {
+                                retTripCost = Math.Min (retTripCost, getTripBaseCost (tripdist, tonnage, pmodel, pcoef, pMF, pmassExp, pdistPow, pbaseMult, pdistpenalty));
+                            }
+                            //if (retTripCost < getTripBaseCost(tripdist, tonnage, pmodel, pMF, pcoef, pdistPow, pmassExp, pbaseMult, pdistpenalty)) retTripCost = getTripBaseCost(tripdist, tonnage, pmodel, pMF, pcoef, pdistPow, pmassExp, pbaseMult, pdistpenalty);
                         }
                     }
                 }
@@ -722,18 +769,51 @@ namespace ESLDCore
                         Vector3d transferVelOffset = getJumpOffset(vessel, farBeacon, nearBeacon.beaconModel);
                         if (nearBeacon.hasAMU) transferVelOffset = farBeacon.orbit.vel;
                         Vector3d spread = ((UnityEngine.Random.onUnitSphere + UnityEngine.Random.insideUnitSphere) / 2) * (float)precision;
+
+                        OrbitDriver vesOrb = vessel.orbitDriver;
+                        Orbit orbit = vesOrb.orbit;
+                        Orbit newOrbit = new Orbit(orbit.inclination, orbit.eccentricity, orbit.semiMajorAxis, orbit.LAN, orbit.argumentOfPeriapsis, orbit.meanAnomalyAtEpoch, orbit.epoch, orbit.referenceBody);
+                        newOrbit.UpdateFromStateVectors (farBeacon.orbit.pos + spread, transferVelOffset, farBeacon.mainBody, Planetarium.GetUniversalTime ());
                         vessel.Landed = false;
                         vessel.Splashed = false;
                         vessel.landedAt = string.Empty;
-                        OrbitPhysicsManager.HoldVesselUnpack(180);
-                        nbparent.GoOnRails();
-                        vessel.GoOnRails();
-                        vessel.situation = Vessel.Situations.ORBITING;
-                        vessel.orbit.UpdateFromStateVectors(farBeacon.orbit.pos + spread, transferVelOffset, farBeacon.mainBody, Planetarium.GetUniversalTime());
-                        vessel.orbit.Init();
-                        vessel.orbit.UpdateFromUT(Planetarium.GetUniversalTime());
+
+                        OrbitPhysicsManager.HoldVesselUnpack(60);
+
+                        List<Vessel> allVessels = FlightGlobals.Vessels;
+                        foreach (Vessel v in allVessels.AsEnumerable()) {
+                            if (v.packed == false)
+                                v.GoOnRails ();
+                        }
+
+                        CelestialBody oldBody = vessel.orbitDriver.orbit.referenceBody;
+
+                        orbit.inclination = newOrbit.inclination;
+                        orbit.eccentricity = newOrbit.eccentricity;
+                        orbit.semiMajorAxis = newOrbit.semiMajorAxis;
+                        orbit.LAN = newOrbit.LAN;
+                        orbit.argumentOfPeriapsis = newOrbit.argumentOfPeriapsis;
+                        orbit.meanAnomalyAtEpoch = newOrbit.meanAnomalyAtEpoch;
+                        orbit.epoch = newOrbit.epoch;
+                        orbit.referenceBody = newOrbit.referenceBody;
+                        orbit.Init();
+                        orbit.UpdateFromUT(Planetarium.GetUniversalTime());
+                        if (orbit.referenceBody != newOrbit.referenceBody)
+                            vesOrb.OnReferenceBodyChange?.Invoke (newOrbit.referenceBody);
+
                         vessel.orbitDriver.pos = vessel.orbit.pos.xzy;
                         vessel.orbitDriver.vel = vessel.orbit.vel;
+
+                        if (vessel.orbitDriver.orbit.referenceBody != oldBody)
+                            GameEvents.onVesselSOIChanged.Fire (new GameEvents.HostedFromToAction<Vessel, CelestialBody> (vessel, oldBody, vessel.orbitDriver.orbit.referenceBody));
+//                        nbparent.GoOnRails();
+//                        vessel.GoOnRails();
+//                        vessel.situation = Vessel.Situations.ORBITING;
+//                        vessel.orbit.UpdateFromStateVectors(farBeacon.orbit.pos + spread, transferVelOffset, farBeacon.mainBody, Planetarium.GetUniversalTime());
+//                        vessel.orbit.Init();
+//                        vessel.orbit.UpdateFromUT(Planetarium.GetUniversalTime());
+//                        vessel.orbitDriver.pos = vessel.orbit.pos.xzy;
+//                        vessel.orbitDriver.vel = vessel.orbit.vel;
                     }
                     else if (!fuelcheck && finalPathCheck)
                     {
@@ -828,6 +908,5 @@ namespace ESLDCore
             Fields["nearBeaconDistance"].guiActive = false;
             Fields["nearBeaconRelVel"].guiActive = false;
         }
-
     }
 }
