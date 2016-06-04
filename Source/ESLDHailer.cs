@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
+//using System.Threading.Tasks;
 using UnityEngine;
 
 namespace ESLDCore
@@ -12,9 +12,10 @@ namespace ESLDCore
         protected Rect BeaconWindow;
         protected Rect ConfirmWindow;
         public ESLDBeacon nearBeacon = null;
-        public Vessel farBeacon = null;
+        public Vessel farBeaconVessel = null;
+        public ESLDBeacon farBeacon = null;
         public string farBeaconModel = "";
-        public Dictionary<Vessel, string> farTargets = new Dictionary<Vessel, string>();
+        public Dictionary<Vessel, ESLDBeacon> farTargets = new Dictionary<Vessel, ESLDBeacon>();
         public Dictionary<ESLDBeacon, string> nearBeacons = new Dictionary<ESLDBeacon, string>();
         public double precision;
         public OrbitDriver oPredictDriver = null;
@@ -31,6 +32,8 @@ namespace ESLDCore
         public string currentBeaconDesc;
         public double HCUCost = 0;
         public HailerButton masterClass = null;
+        bool drawConfirmOn = false;
+        bool drawGUIOn = false;
 
         // GUI Open?
         [KSPField(guiName = "GUIOpen", isPersistant = true, guiActive = false)]
@@ -44,56 +47,6 @@ namespace ESLDCore
 
         [KSPField(guiName = "Drift", guiActive = false, guiUnits = "m/s")]
         public double nearBeaconRelVel;
-
-        // Calculate base cost in units of Karborundum before penalties for a transfer.
-        private double getTripBaseCost(double tripdist, double tonnage, string nbModel, float coef=0.01f, float massFctr=0.0002f, float massExp=1f, int distPow=1, float baseMult=0.25f, int distpenalty=0)
-        {
-			double yardstick = Math.Pow (13599840256, 1 / (distPow + 1)); //Math.Sqrt(Math.Sqrt(13599840256));
-			switch (nbModel)
-            {
-                case "LB10":
-                    massFctr = 0.001f;
-                    coef = 0.01057371f;
-                    distPow = 1;
-                    massExp = 1f;
-                    baseMult = 0f;
-                    distpenalty = 0;
-				    if (tripdist > 1000000000) distpenalty = 2;
-                    return ((Math.Pow(tonnage, 1 + (.001 * tonnage) + distpenalty) / 10) * ((Math.Sqrt(Math.Sqrt(tripdist * (tripdist / 5E6)))) / yardstick) / tonnage * 10000) * tonnage / 2000;
-                case "LB15":
-                    massFctr = 0.0002f;
-                    coef = 0.001057371f;
-                    distPow = 1;
-                    massExp = 2f;
-                    baseMult = 0.35f;
-                    distpenalty = 0;
-                    return (700 + (Math.Pow(tonnage, 1 + (.0002 * Math.Pow(tonnage, 2))) / 10) * ((Math.Sqrt(Math.Sqrt(tripdist * (tripdist / 5E10)))) / yardstick) / tonnage * 10000) * tonnage / 2000;
-                case "LB100":
-                    massFctr = 0.00025f;
-                    coef = 0.88650770f;
-                    distPow = 3;
-                    massExp = 1f;
-                    baseMult = 0.25f;
-                    distpenalty = 0;
-                    return (500 + (Math.Pow(tonnage, 1 + (.00025 * tonnage)) / 20) * ((Math.Sqrt(Math.Sqrt(Math.Sqrt(tripdist * 25000)))) / Math.Sqrt(yardstick)) / tonnage * 10000) * tonnage / 2000;
-                case "IB1":
-                    massFctr = 1/6000;
-                    coef = Convert.ToSingle(0.9*Math.Pow((1+tripdist*2E11),1/4));
-                    distPow = 1;
-                    massExp = 1f;
-                    baseMult = 0f;
-                    distpenalty = 0;
-                    return ((((Math.Pow(tonnage, 1 + (tonnage / 6000)) * 0.9) / 10) * ((Math.Sqrt(Math.Sqrt(tripdist + 2E11))) / yardstick) / tonnage * 10000) * tonnage / 2000);
-            default:
-                    if ((distpenalty>0)&&(tripdist > distpenalty)) {
-                        distpenalty = 2;
-                    } else {
-                        distpenalty = 0;
-                    }
-                    yardstick = Math.Pow (13599840256, 1/Math.Pow(2, distPow + 1)); //Math.Sqrt(Math.Sqrt(13599840256));
-                    return tonnage * baseMult + Math.Pow(tonnage, 1 + massFctr * Math.Pow(tonnage, massExp) + distpenalty) * Math.Pow(tripdist, 1/Math.Pow(2, distPow)) * coef / yardstick;
-            }
-        }
 
         // Calculate Jump Offset
         private Vector3d getJumpOffset(Vessel near, Vessel far, string model)
@@ -183,6 +136,7 @@ namespace ESLDCore
             oPredict.drawMode = OrbitRenderer.DrawMode.REDRAW_AND_RECALCULATE;
 
             // Directional indicator.
+            /*
             oDirObj = new GameObject("Indicator");
             oDirObj.layer = 10; // Map layer!
             oDirection = oDirObj.AddComponent<LineRenderer>();
@@ -212,7 +166,7 @@ namespace ESLDCore
             oDirection.SetPosition(0, Vector3d.zero + exitTraj.xzy.normalized * baseStart);
             oDirection.SetPosition(1, exitTraj.xzy.normalized * baseEnd);
             oDirection.enabled = true;
-            // */
+             */
         }
 
 
@@ -247,7 +201,9 @@ namespace ESLDCore
         // Back out of orbital predictions.
         private void hideExitOrbit(OrbitRenderer showOrbit)
         {
-            showOrbit.drawMode = OrbitRenderer.DrawMode.OFF;
+            // Orbit prediction is broken for now FIXME!!
+
+            /*showOrbit.drawMode = OrbitRenderer.DrawMode.OFF;
             showOrbit.driver.drawOrbit = false;
             showOrbit.drawIcons = OrbitRenderer.DrawIcons.NONE;
 
@@ -260,7 +216,7 @@ namespace ESLDCore
                 {
                     MapView.MapCamera.SetTarget(mobj);
                 }
-            }
+            }*/
             if (MapView.MapIsEnabled && !wasInMapView) MapView.ExitMapView();
         }
 
@@ -294,31 +250,6 @@ namespace ESLDCore
             HCUCost += craft.GetCrewCount() * 0.9 / 1.13;
             HCUCost = Math.Round(HCUCost * 100) / 100;
             return HCUParts;
-        }
-
-        // Calculate how far away from a beacon the ship will arrive.
-        private double getTripSpread(double tripdist, string fbmodel)
-        {
-            double driftmodifier = 1.1;
-            switch (fbmodel)
-            {
-                case "LB10":
-                    driftmodifier = 7;
-                    break;
-                case "LB15":
-                    driftmodifier = 15;
-                    break;
-                case "LB100":
-                    driftmodifier = 80;
-                    break;
-                case "IB1":
-                    driftmodifier = 1.3;
-                    break;
-                default:
-                    driftmodifier = 1.1;
-                    break;
-            }
-            return Math.Round(Math.Log(tripdist) / Math.Log(driftmodifier) * 10) * 100;
         }
 
         // Find loaded beacons.  Only in physics distance, since otherwise they're too far out.
@@ -406,8 +337,12 @@ namespace ESLDCore
                     foreach (ProtoPartModuleSnapshot pmod in ppart.modules)
                     {
                         if (pmod.moduleName != "ESLDBeacon") continue;
-                        if (pmod.moduleValues.GetValue("beaconStatus") != "Active.") continue;
-                        farTargets.Add(craft, pmod.moduleValues.GetValue("beaconModel"));
+                        if (pmod.moduleValues.GetValue("activated") == "True")
+                        {
+                            ESLDBeacon protoBeacon = new ESLDBeacon(pmod.moduleValues);
+                            protoBeacon.activated = true;
+                            farTargets.Add(craft, protoBeacon);
+                        }
                     }
                 }
             }
@@ -483,10 +418,10 @@ namespace ESLDCore
                     if (vessel.GetCrewCount() > 0) GUILayout.Label("Transfer will kill crew.");
                     if (HCUParts.Count > 0) GUILayout.Label("Some resources will destabilize.");
                 }
-                foreach (KeyValuePair<Vessel, string> ftarg in farTargets)
+                foreach (KeyValuePair<Vessel, ESLDBeacon> ftarg in farTargets)
                 {
                     double tripdist = Vector3d.Distance(nbparent.GetWorldPos3D(), ftarg.Key.GetWorldPos3D());
-                    double tripcost = getTripBaseCost(tripdist, tonnage, nbModel, nearBeacon.coef, nearBeacon.massFctr, nearBeacon.massExp, nearBeacon.distPow, nearBeacon.baseMult, nearBeacon.distpenalty);
+                    double tripcost = nearBeacon.getTripBaseCost(tripdist, tonnage);
                     double sciBonus = nearBeacon.getCrewBonuses(nbparent, "Scientist", 0.5, 5);
                     if (nearBeacon.hasSCU)
                     {
@@ -515,7 +450,7 @@ namespace ESLDCore
                     if (tripcost <= nbfuel) // Show blocked status only for otherwise doable transfers.
                     {
                         fuelstate = buttonHasFuel;
-                        KeyValuePair<string, CelestialBody> checkpath = masterClass.HasTransferPath(nbparent, ftarg.Key, nearBeacon.gLimit);
+                        KeyValuePair<string, CelestialBody> checkpath = masterClass.HasTransferPath(nbparent, ftarg.Key, nearBeacon.gLimitEff);
                         if (checkpath.Key != "OK")
                         {
                             fuelstate = buttonNoPath;
@@ -527,18 +462,21 @@ namespace ESLDCore
                     {
                         if (fuelstate == buttonHasFuel)
                         {
-                            farBeacon = ftarg.Key;
-                            farBeaconModel = ftarg.Value;
+                            farBeaconVessel = ftarg.Key;
+                            farBeacon = ftarg.Value;
+                            farBeaconModel = farBeacon.beaconModel;
                             drawConfirm();
-                            if (!nearBeacon.hasAMU) showExitOrbit(vessel, farBeacon, nearBeacon.beaconModel);
-                            RenderingManager.AddToPostDrawQueue(4, new Callback(drawConfirm));
-                            RenderingManager.RemoveFromPostDrawQueue(3, new Callback(drawGUI));
+                            if (!nearBeacon.hasAMU) showExitOrbit(vessel, farBeaconVessel, nearBeacon.beaconModel);
+                            //RenderingManager.AddToPostDrawQueue(4, new Callback(drawConfirm));
+                            drawConfirmOn = true;
+                            //RenderingManager.RemoveFromPostDrawQueue(3, new Callback(drawGUI));
+                            drawGUIOn = false;
                             Events["HailerGUIClose"].active = false;
                             Events["HailerGUIOpen"].active = true;
                         }
                         else
                         {
-                            print("Current beacon has a g limit of " + nearBeacon.gLimit);
+                            print("Current beacon has a g limit of " + nearBeacon.gLimitEff);
                             string messageToPost = "Cannot Warp: Origin beacon has " + nbfuel + " of " + tripcost + " Karborundum required to warp.";
                             string thevar = (blockRock == "Mun" || blockRock == "Sun") ? "the " : string.Empty;
                             if (fuelstate == buttonNoPath && blockReason == "Gravity") messageToPost = "Cannot Warp: Path of transfer intersects a high-gravity area around " + thevar + blockRock + ".";
@@ -588,11 +526,11 @@ namespace ESLDCore
 
             if (nearBeacon != null)
             {
-                double tripdist = Vector3d.Distance(nearBeacon.vessel.GetWorldPos3D(), farBeacon.GetWorldPos3D());
+                double tripdist = Vector3d.Distance(nearBeacon.vessel.GetWorldPos3D(), farBeaconVessel.GetWorldPos3D());
                 double tonnage = vessel.GetTotalMass();
                 Vessel nbparent = nearBeacon.vessel;
                 string nbModel = nearBeacon.beaconModel;
-                double tripcost = getTripBaseCost(tripdist, tonnage, nbModel, nearBeacon.coef, nearBeacon.massFctr, nearBeacon.massExp, nearBeacon.distPow, nearBeacon.baseMult, nearBeacon.distpenalty);
+                double tripcost = nearBeacon.getTripBaseCost(tripdist, tonnage);
                 double driftpenalty = Math.Pow(Math.Floor(nearBeaconDistance / 200), 2) + Math.Floor(Math.Pow(nearBeaconRelVel, 1.5));
                 if (driftpenalty > 0) GUILayout.Label("+" + driftpenalty + "% due to Drift.");
                 Dictionary<Part, string> HCUParts = getHCUParts(vessel);
@@ -633,7 +571,7 @@ namespace ESLDCore
                 tripcost = Math.Round(tripcost * 100) / 100;
                 if (nearBeacon.hasAMU)
                 {
-                    double AMUCost = getAMUCost(vessel, farBeacon, tonnage, nearBeacon.beaconModel);
+                    double AMUCost = getAMUCost(vessel, farBeaconVessel, tonnage, nearBeacon.beaconModel);
                     GUILayout.Label("AMU Compensation adds " + AMUCost + " Karborundum.");
                     tripcost += AMUCost;
                 }
@@ -645,46 +583,32 @@ namespace ESLDCore
                     tripcost += adjHCUCost;
                 }
                 GUILayout.Label("Total Cost: " + tripcost + " Karborundum.");
-                GUILayout.Label("Destination: " + farBeacon.mainBody.name + " at " + Math.Round(farBeacon.altitude / 1000) + "km.");
-                precision = getTripSpread(tripdist, farBeaconModel);
+                GUILayout.Label("Destination: " + farBeaconVessel.mainBody.name + " at " + Math.Round(farBeaconVessel.altitude / 1000) + "km.");
+                precision = farBeacon.getTripSpread(tripdist);
                 GUILayout.Label("Transfer will emerge within " + precision + "m of destination beacon.");
-                if (farBeacon.altitude - precision <= farBeacon.mainBody.Radius * 0.1f || farBeacon.altitude - precision <= farBeacon.mainBody.atmosphereDepth)
+                if (farBeaconVessel.altitude - precision <= farBeaconVessel.mainBody.Radius * 0.1f || farBeaconVessel.altitude - precision <= farBeaconVessel.mainBody.atmosphereDepth)
                 {
-                    GUILayout.Label("Arrival area is very close to " + farBeacon.mainBody.name + ".", labelNoFuel);
+                    GUILayout.Label("Arrival area is very close to " + farBeaconVessel.mainBody.name + ".", labelNoFuel);
                 }
                 if (!nearBeacon.hasAMU)
                 {
-                    Vector3d transferVelOffset = getJumpOffset(vessel, farBeacon, nearBeacon.beaconModel) - farBeacon.orbit.vel;
+                    Vector3d transferVelOffset = getJumpOffset(vessel, farBeaconVessel, nearBeacon.beaconModel) - farBeaconVessel.orbit.vel;
                     GUILayout.Label("Velocity relative to exit beacon will be " + Math.Round(transferVelOffset.magnitude) + "m/s.");
                 }
                 double retTripCost = 0;
                 double checkfuel = 0;
                 bool fuelcheck = false;
-                foreach (ProtoPartSnapshot ppart in farBeacon.protoVessel.protoPartSnapshots)
+                foreach (ProtoPartSnapshot ppart in farBeaconVessel.protoVessel.protoPartSnapshots)
                 {
                     foreach (ProtoPartModuleSnapshot pmod in ppart.modules)
                     {
                         if (pmod.moduleName == "ESLDBeacon" && pmod.moduleValues.GetValue("beaconStatus") == "Active.")
                         {
-                            string pmodel = pmod.moduleValues.GetValue("beaconModel");
-                            float pMF; float pcoef; int pdistPow; float pmassExp; float pbaseMult; int pdistpenalty;
-                            if (!float.TryParse (pmod.moduleValues.GetValue ("massFctr"), out pMF))
-                                pMF = 0.0002f;
-                            if (!float.TryParse (pmod.moduleValues.GetValue ("coef"), out pcoef))
-                                pcoef = 0.001f;
-                            if (!int.TryParse (pmod.moduleValues.GetValue ("distPow"), out pdistPow))
-                                pdistPow = 1;
-                            if (!float.TryParse (pmod.moduleValues.GetValue ("massExp"), out pmassExp))
-                                pmassExp = 1f;
-                            if (!float.TryParse (pmod.moduleValues.GetValue ("baseMult"), out pbaseMult))
-                                pbaseMult = 0.25f;
-                            if (!int.TryParse (pmod.moduleValues.GetValue ("distpenalty"), out pdistpenalty))
-                                pdistpenalty = 0;
                             fuelcheck = double.TryParse(pmod.moduleValues.GetValue("fuelOnBoard"), out checkfuel);
                             if (retTripCost == 0) {
-                                retTripCost = getTripBaseCost (tripdist, tonnage, pmodel, pcoef, pMF, pmassExp, pdistPow, pbaseMult, pdistpenalty);
+                                retTripCost = new ESLDBeacon(pmod.moduleValues).getTripBaseCost (tripdist, tonnage);
                             } else {
-                                retTripCost = Math.Min (retTripCost, getTripBaseCost (tripdist, tonnage, pmodel, pcoef, pMF, pmassExp, pdistPow, pbaseMult, pdistpenalty));
+                                retTripCost = Math.Min (retTripCost, new ESLDBeacon(pmod.moduleValues).getTripBaseCost(tripdist, tonnage));
                             }
                             //if (retTripCost < getTripBaseCost(tripdist, tonnage, pmodel, pMF, pcoef, pdistPow, pmassExp, pbaseMult, pdistpenalty)) retTripCost = getTripBaseCost(tripdist, tonnage, pmodel, pMF, pcoef, pdistPow, pmassExp, pbaseMult, pdistpenalty);
                         }
@@ -702,14 +626,16 @@ namespace ESLDCore
                 {
                     GUILayout.Label("Destination beacon would need  " + retTripCost + " (base cost) Karborundum for return trip using active beacons.", labelNoFuel);
                 }
-                if (oPredict != null) updateExitOrbit(vessel, farBeacon, nearBeacon.beaconModel);
+                // Orbit prediction is broken for now FIXME!!
+                //if (oPredict != null) updateExitOrbit(vessel, farBeacon, nearBeacon.beaconModel);
                 if (GUILayout.Button("Confirm and Warp", buttonNeutral))
                 {
-                    RenderingManager.RemoveFromPostDrawQueue(4, new Callback(drawConfirm));
+                    //RenderingManager.RemoveFromPostDrawQueue(4, new Callback(drawConfirm));
+                    drawConfirmOn = false;
                     HailerGUIClose();
                     if (oPredict != null) hideExitOrbit(oPredict);
                     // Check transfer path one last time.
-                    KeyValuePair<string, CelestialBody> checkpath = masterClass.HasTransferPath(nbparent, farBeacon, nearBeacon.gLimit); // One more check for a clear path in case they left the window open too long.
+                    KeyValuePair<string, CelestialBody> checkpath = masterClass.HasTransferPath(nbparent, farBeaconVessel, nearBeacon.gLimitEff); // One more check for a clear path in case they left the window open too long.
                     bool finalPathCheck = false;
                     if (checkpath.Key == "OK") finalPathCheck = true;
                     // Check fuel one last time.
@@ -766,14 +692,14 @@ namespace ESLDCore
                             }
                         }
                         masterClass.dazzle();
-                        Vector3d transferVelOffset = getJumpOffset(vessel, farBeacon, nearBeacon.beaconModel);
-                        if (nearBeacon.hasAMU) transferVelOffset = farBeacon.orbit.vel;
+                        Vector3d transferVelOffset = getJumpOffset(vessel, farBeaconVessel, nearBeacon.beaconModel);
+                        if (nearBeacon.hasAMU) transferVelOffset = farBeaconVessel.orbit.vel;
                         Vector3d spread = ((UnityEngine.Random.onUnitSphere + UnityEngine.Random.insideUnitSphere) / 2) * (float)precision;
 
                         OrbitDriver vesOrb = vessel.orbitDriver;
                         Orbit orbit = vesOrb.orbit;
                         Orbit newOrbit = new Orbit(orbit.inclination, orbit.eccentricity, orbit.semiMajorAxis, orbit.LAN, orbit.argumentOfPeriapsis, orbit.meanAnomalyAtEpoch, orbit.epoch, orbit.referenceBody);
-                        newOrbit.UpdateFromStateVectors (farBeacon.orbit.pos + spread, transferVelOffset, farBeacon.mainBody, Planetarium.GetUniversalTime ());
+                        newOrbit.UpdateFromStateVectors (farBeaconVessel.orbit.pos + spread, transferVelOffset, farBeaconVessel.mainBody, Planetarium.GetUniversalTime ());
                         vessel.Landed = false;
                         vessel.Splashed = false;
                         vessel.landedAt = string.Empty;
@@ -835,17 +761,27 @@ namespace ESLDCore
             }
             if (!vessel.isActiveVessel)
             {
-                RenderingManager.RemoveFromPostDrawQueue(4, new Callback(drawConfirm));
+                //RenderingManager.RemoveFromPostDrawQueue(4, new Callback(drawConfirm));
+                drawConfirmOn = false;
                 if (oPredict != null) hideExitOrbit(oPredict);
             }
             if (GUILayout.Button("Back", buttonNeutral))
             {
-                RenderingManager.RemoveFromPostDrawQueue(4, new Callback(drawConfirm));
+                //RenderingManager.RemoveFromPostDrawQueue(4, new Callback(drawConfirm));
+                drawConfirmOn = false;
                 HailerGUIOpen();
                 if (oPredict != null) hideExitOrbit(oPredict);
             }
             GUILayout.EndVertical();
             GUI.DragWindow(new Rect(0, 0, 10000, 20));
+        }
+
+        private void OnGUI()
+        {
+            if (drawGUIOn)
+                drawGUI();
+            if (drawConfirmOn)
+                drawConfirm();
         }
 
         private void drawGUI()
@@ -879,7 +815,8 @@ namespace ESLDCore
         [KSPEvent(name = "HailerGUIOpen", active = false, guiActive = true, guiName = "Beacon Interface")]
         public void HailerGUIOpen()
         {
-            RenderingManager.AddToPostDrawQueue(3, new Callback(drawGUI));
+            //RenderingManager.AddToPostDrawQueue(3, new Callback(drawGUI));
+            drawGUIOn = true;
             Events["HailerGUIOpen"].active = false;
             Events["HailerGUIClose"].active = true;
             guiopen = true;
@@ -887,7 +824,8 @@ namespace ESLDCore
         [KSPEvent(name = "HailerGUIClose", active = false, guiActive = true, guiName = "Close Interface")]
         public void HailerGUIClose()
         {
-            RenderingManager.RemoveFromPostDrawQueue(3, new Callback(drawGUI));
+            //RenderingManager.RemoveFromPostDrawQueue(3, new Callback(drawGUI));
+            drawGUIOn = false;
             Events["HailerGUIClose"].active = false;
             Events["HailerGUIOpen"].active = true;
             guiopen = false;
@@ -899,7 +837,8 @@ namespace ESLDCore
             isActive = false;
             if (oPredict != null) hideExitOrbit(oPredict);
             HailerGUIClose();
-            RenderingManager.RemoveFromPostDrawQueue(4, new Callback(drawConfirm));
+            //RenderingManager.RemoveFromPostDrawQueue(4, new Callback(drawConfirm));
+            drawConfirmOn = false;
             Events["HailerDeactivate"].active = false;
             Events["HailerActivate"].active = true;
             Events["HailerGUIOpen"].active = false;

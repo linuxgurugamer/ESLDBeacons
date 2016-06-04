@@ -2,8 +2,9 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
+//using System.Threading.Tasks;
 using UnityEngine;
+using KSP.UI.Screens;
 
 namespace ESLDCore
 {
@@ -53,11 +54,11 @@ namespace ESLDCore
             // Sync GUI & Button States
             if (this.button != null)
             {
-                if (this.button.State == RUIToggleButton.ButtonState.TRUE && !hailer.guiopen)
+                if (this.button.toggleButton.CurrentState == KSP.UI.UIRadioButton.State.True && !hailer.guiopen)
                 {
                     this.button.SetFalse();
                 }
-                if (this.button.State == RUIToggleButton.ButtonState.FALSE && hailer.guiopen)
+                if (this.button.toggleButton.CurrentState == KSP.UI.UIRadioButton.State.False && hailer.guiopen)
                 {
                     this.button.SetTrue();
                 }
@@ -86,10 +87,12 @@ namespace ESLDCore
 
         public void Awake()
         {
-            GameEvents.onGUIApplicationLauncherReady.Add(onGUIApplicationLauncherReady);
+            //GameEvents.onGUIApplicationLauncherReady.Add(onGUIApplicationLauncherReady);
             GameEvents.onGameSceneLoadRequested.Add(onSceneChangeRequest);
             GameEvents.onVesselChange.Add(onVesselChange);
+            GameEvents.onGUIApplicationLauncherDestroyed.Add(killButton);
             ESLDButtonOn = GameDatabase.Instance.GetTexture("ESLDBeacons/Textures/launcher", false);
+            GameEvents.onGameSceneLoadRequested.Add(OnGameSceneLoadRequestedForAppLauncher);
             mainCam = FlightCamera.fetch;
         }
 
@@ -98,7 +101,9 @@ namespace ESLDCore
             GameEvents.onGUIApplicationLauncherReady.Remove(onGUIApplicationLauncherReady);
             GameEvents.onGameSceneLoadRequested.Remove(onSceneChangeRequest);
             GameEvents.onVesselChange.Remove(onVesselChange);
+            GameEvents.onGUIApplicationLauncherDestroyed.Remove(killButton);
             killButton();
+            GameEvents.onGameSceneLoadRequested.Remove(OnGameSceneLoadRequestedForAppLauncher);
         }
 
         private void onTrue()
@@ -152,10 +157,16 @@ namespace ESLDCore
 
         private void killButton()
         {
-            if (button != null)
+            if (button != null && ApplicationLauncher.Instance != null)
             {
                 ApplicationLauncher.Instance.RemoveModApplication(button);
+                button = null;
             }
+        }
+
+        void OnGameSceneLoadRequestedForAppLauncher(GameScenes SceneToLoad)
+        {
+            killButton();
         }
 
         // Warp Effect

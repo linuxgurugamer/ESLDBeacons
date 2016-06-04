@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
+//using System.Threading.Tasks;
 using UnityEngine;
 
 namespace ESLDCore
@@ -21,14 +21,16 @@ namespace ESLDCore
         public override void OnUpdate()
         {
             ModuleAnimateGeneric MAG = part.FindModuleImplementing<ModuleAnimateGeneric>();
-            MAG.Events["Toggle"].guiActive = false;
-            if (activated && MAG.Progress == 0 && !MAG.IsMoving())
-            {
-                MAG.Toggle();
-            }
-            else if (!activated && MAG.Progress == 1 && !MAG.IsMoving())
-            {
-                MAG.Toggle();
+            if (MAG != null) {
+                MAG.Events["Toggle"].guiActive = false;
+                if (activated && MAG.Progress == 0 && !MAG.IsMoving())
+                {
+                    MAG.Toggle();
+                }
+                else if (!activated && MAG.Progress == 1 && !MAG.IsMoving())
+                {
+                    MAG.Toggle();
+                }
             }
         }
 
