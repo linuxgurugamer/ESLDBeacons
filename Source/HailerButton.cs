@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -22,6 +22,7 @@ namespace ESLDCore
         private float userFOV = 60;
         private float currentDistance = 1;
         private float userDistance = 1;
+        Logger log = new Logger("ESLDCore:HailerButton: ");
 
         public void Update()
         {
@@ -73,12 +74,12 @@ namespace ESLDCore
                 currentDistance = Mathf.Lerp(currentDistance, userDistance, 0.04f);
                 mainCam.SetFoV(currentFOV);
                 mainCam.SetDistance(currentDistance);
-                print("Distance: " + currentDistance);
+                log.debug("Distance: " + currentDistance);
                 if (userFOV + 0.25 >= currentFOV)
                 {
                     mainCam.SetFoV(userFOV);
                     mainCam.SetDistance(userDistance);
-                    print("Done messing with camera!");
+                    log.debug("Done messing with camera!");
                     isDazzling = false;
                 }
                 
@@ -177,7 +178,7 @@ namespace ESLDCore
             currentFOV = 180;
             currentDistance = 0.1f;
             isDazzling = true;
-            print("Messing with camera!");
+            log.debug("Messing with camera!");
         }
 
         // Finds if the path between beacons passes too close to a planet or is within its gravity well.
@@ -205,7 +206,7 @@ namespace ESLDCore
                 if (lateralOffset.magnitude < limbo)
                 {
                     returnPair = new KeyValuePair<string, CelestialBody>(limbotype, rock);
-                    //print("Lateral Offset was " + lateralOffset.magnitude + "m and needed to be " + limbo + "m, failed due to " + limbotype + " check for " + rock.name + ".");
+                    //log.debug("Lateral Offset was " + lateralOffset.magnitude + "m and needed to be " + limbo + "m, failed due to " + limbotype + " check for " + rock.name + ".");
                     return returnPair;
                 }
             }

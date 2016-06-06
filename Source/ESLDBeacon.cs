@@ -25,12 +25,13 @@ namespace ESLDCore
         public bool activated = false;
 
         // Self-reported fuel quantity.
-        [KSPField(isPersistant = true)]
-        public double fuelOnBoard = 0;
+        // Now handled by jumpResources
+        //[KSPField(isPersistant = true)]
+        //public double fuelOnBoard = 0;
 
         // Beacon model (from part config).
         // Can be any string, but overrides cost parameters when equal to one of the original 4 models.
-        [KSPField]
+        [KSPField(isPersistant = true)]
         public string beaconModel = string.Empty;
 
         // Cost equation:
@@ -80,40 +81,75 @@ namespace ESLDCore
         [KSPField(guiName = "Electric Use", guiActive = false, guiUnits = " EC/s")]
         public double constantEC;
 
+        public List<ESLDJumpResource> jumpResources = new List<ESLDJumpResource>();
+
         public bool hasAMU = false;
         public bool hasHCU = false;
         public bool hasGMU = false;
         public bool hasSCU = false;
         public double massBonus = 1;
 
+        private const string RnodeName = "RESOURCE";
+        Logger log = new Logger("ESLDCore:ESLDBeacons: ");
+
         public ESLDBeacon() { }
-        public ESLDBeacon(ConfigNode configNode)
+        public ESLDBeacon(ConfigNode CFGnode)
         {
-            beaconModel = configNode.GetValue("beaconModel");
-            if (!bool.TryParse(configNode.GetValue("activated"), out activated))
-                activated = false;
-            if (!float.TryParse(configNode.GetValue("gLimit"), out gLimit))
-                gLimit = 0.5f;
-            if (!float.TryParse(configNode.GetValue("gLimitEff"), out gLimitEff))
-                gLimitEff = gLimit;
-            if (!double.TryParse(configNode.GetValue("fuelOnBoard"), out fuelOnBoard))
-                fuelOnBoard = 0;
-            if (!float.TryParse(configNode.GetValue("coef"), out coef))
-                coef = 0.001f;
-            if (!float.TryParse(configNode.GetValue("massFctr"), out massFctr))
-                massFctr = 0.0002f;
-            if (!float.TryParse(configNode.GetValue("massExp"), out massExp))
-                massExp = 1f;
-            if (!int.TryParse(configNode.GetValue("distPow"), out distPow))
-                distPow = 1;
-            if (!float.TryParse(configNode.GetValue("baseMult"), out baseMult))
-                baseMult = 0.25f;
-            if (!int.TryParse(configNode.GetValue("distpenalty"), out distpenalty))
-                distpenalty = 0;
-            if (!float.TryParse(configNode.GetValue("jumpPrecision"), out jumpPrecision))
-                jumpPrecision = 10;
-            if (!int.TryParse(configNode.GetValue("techBoxInventory"), out techBoxInventory))
-                techBoxInventory = 0;
+            this.buildFromConfigNode(CFGnode);
+        }
+        public ESLDBeacon(ConfigNode savenode, ConfigNode CFGnode)
+        {
+            this.buildFromConfigNode(CFGnode);
+            this.buildFromConfigNode(savenode);
+        }
+
+        protected void buildFromConfigNode(ConfigNode node)
+        {
+            bool tempbool = false;
+            int tempint = 0;
+            float tempfloat = 0;
+            beaconModel = node.GetValue("beaconModel");
+            if (bool.TryParse(node.GetValue("activated"), out tempbool))
+                activated = tempbool;
+            if (float.TryParse(node.GetValue("gLimit"), out tempfloat))
+                gLimit = tempfloat;
+            if (float.TryParse(node.GetValue("gLimitEff"), out tempfloat))
+                gLimitEff = tempfloat;
+            if (float.TryParse(node.GetValue("coef"), out tempfloat))
+                coef = tempfloat;
+            if (float.TryParse(node.GetValue("massFctr"), out tempfloat))
+                massFctr = tempfloat;
+            if (float.TryParse(node.GetValue("massExp"), out tempfloat))
+                massExp = tempfloat;
+            if (int.TryParse(node.GetValue("distPow"), out tempint))
+                distPow = tempint;
+            if (float.TryParse(node.GetValue("baseMult"), out tempfloat))
+                baseMult = tempfloat;
+            if (int.TryParse(node.GetValue("distpenalty"), out tempint))
+                distpenalty = tempint;
+            if (float.TryParse(node.GetValue("jumpPrecision"), out tempfloat))
+                jumpPrecision = tempfloat;
+            if (int.TryParse(node.GetValue("techBoxInventory"), out tempint))
+                techBoxInventory = tempint;
+            if (node.GetNodes(RnodeName).Count() > 0)
+            {
+                jumpResources.Clear();
+                foreach (ConfigNode Rnode in node.GetNodes(RnodeName))
+                {
+                    string Rname = Rnode.GetValue("name");
+                    float Rratio = 1;
+                    double RfuelOnBoard = 0;
+                    bool fuelCheck = true;
+                    if (!float.TryParse(Rnode.GetValue("ratio"), out Rratio))
+                        Rratio = 1; // Rratio is already 1. Replace this with a log entry. FIXME!!
+                    if (!double.TryParse(Rnode.GetValue("fuelOnBoard"), out RfuelOnBoard))
+                    {
+                        RfuelOnBoard = 0;
+                        fuelCheck = false;
+                    }
+                    jumpResources.Add(new ESLDJumpResource(Rname, Rratio, RfuelOnBoard, fuelCheck));
+                }
+            }
         }
 
         public override void OnUpdate()
@@ -133,15 +169,8 @@ namespace ESLDCore
                     MAG.Toggle();
                 }
             }
-            double vfuel = 0;
-            foreach (Part vpart in vessel.Parts)
-            {
-                foreach (PartResource vpr in vpart.Resources)
-                {
-                    if (vpr.resourceName == "Karborundum") vfuel += vpr.amount;
-                }
-            }
-            fuelOnBoard = vfuel;
+            foreach (ESLDJumpResource Jresource in jumpResources)
+                Jresource.getFuelOnBoard(vessel);
         }
 
 
@@ -227,6 +256,14 @@ namespace ESLDCore
             }
         }
 
+        // Calculate AMU cost in units of Karborundum given two vessel endpoints and the tonnage of the transferring vessel.
+        public double getAMUCost(Vessel near, Vessel far, double tton)
+        {
+            Vector3d velDiff = ESLDHailer.getJumpVelOffset(near, far, this) - far.orbit.vel;
+            double comp = velDiff.magnitude;
+            return Math.Round(((comp * tton) / Math.Pow(Math.Log10(comp * tton), 2)) / 2) / 100;
+        }
+
         // Calculate how far away from a beacon the ship will arrive.
         public double getTripSpread(double tripdist)
         {
@@ -306,8 +343,11 @@ namespace ESLDCore
             double limbo = (Math.Sqrt((6.673E-11 * targetbody.Mass) / gLimitEff) - targetbody.Radius) * massBonus;
             gLimitEff = Convert.ToSingle((6.673E-11 * targetbody.Mass) / Math.Pow(limbo + targetbody.Radius, 2));
             if (limbo < targetbody.Radius * 0.25) limbo = targetbody.Radius * 0.25;
-            neededEC = Math.Round((fuelOnBoard * neededMult * (FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude / baseLimit)) * getCrewBonuses(vessel, "Engineer", 0.5, 5));
-            constantEC = Math.Round(fuelOnBoard / constantDiv * (FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude / baseLimit) * 100 * getCrewBonuses(vessel, "Engineer", 0.5, 5)) / 100;
+            double fuelECMult = 0;
+            foreach (ESLDJumpResource Jresource in jumpResources)
+                fuelECMult += Jresource.fuelOnBoard * Jresource.ECMult;
+            neededEC = Math.Round((fuelECMult * neededMult * (FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude / baseLimit)) * getCrewBonuses(vessel, "Engineer", 0.5, 5));
+            constantEC = Math.Round(fuelECMult / constantDiv * (FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude / baseLimit) * 100 * getCrewBonuses(vessel, "Engineer", 0.5, 5)) / 100;
             return Math.Round(limbo / 1000);
         }
 
@@ -351,7 +391,7 @@ namespace ESLDCore
         }
 
         // Simple bool for resource checking and usage.  Returns true and optionally uses resource if resAmount of res is available.
-        public bool requireResource(Vessel craft, string res, double resAmount, bool consumeResource)
+        public bool requireResource(Vessel craft, string res, double resAmount, bool consumeResource = false)
         {
             if (!craft.loaded) return false; // Unloaded resource checking is unreliable.
             Dictionary<PartResource, double> toDraw = new Dictionary<PartResource,double>();
@@ -390,17 +430,20 @@ namespace ESLDCore
         public void BeaconInitialize()
         {
             checkOwnTechBoxes();
-            print("Crew bonus: Engineers on board reduce electrical usage by: " + (1 - getCrewBonuses(vessel, "Engineer", 0.5, 5)) * 100 + "%");
-            print("Crew bonus: Scientists on board reduce Karborundum costs by: " + (1 - getCrewBonuses(vessel, "Scientist", 0.5, 5)) * 100 + "%");
-            print("Crew bonus: Pilots on board reduce drift by: " + (1 - getCrewBonuses(vessel, "Pilot", 0.5, 5)) * 100 + "%");
-            if (!requireResource(vessel, "Karborundum", 0.1, false))
+            log.info("Crew bonus: Engineers on board reduce electrical usage by: " + (1 - getCrewBonuses(vessel, "Engineer", 0.5, 5)) * 100 + "%");
+            log.info("Crew bonus: Scientists on board reduce jump costs by: " + (1 - getCrewBonuses(vessel, "Scientist", 0.5, 5)) * 100 + "%");
+            log.info("Crew bonus: Pilots on board reduce drift by: " + (1 - getCrewBonuses(vessel, "Pilot", 0.5, 5)) * 100 + "%");
+            foreach(ESLDJumpResource Jresource in jumpResources)
             {
-                ScreenMessages.PostScreenMessage("Cannot activate!  Insufficient Karborundum to initiate reaction.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
-                return;
+                if (!requireResource(vessel, Jresource.name, double.Epsilon, false))
+                {
+                    ScreenMessages.PostScreenMessage("Cannot activate!  Insufficient " + Jresource.name + " to initiate reaction.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
+                    return;
+                }
             }
             if (FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude > gLimitEff) // Check our G forces.
             {
-                print("Too deep in gravity well to activate!");
+                log.warning("Too deep in gravity well to activate!");
                 string thevar = (vessel.mainBody.name == "Mun" || vessel.mainBody.name == "Sun") ? "the " : string.Empty;
                 ScreenMessages.PostScreenMessage("Cannot activate!  Gravity from " + thevar + vessel.mainBody.name + " is too strong.",5.0f,ScreenMessageStyle.UPPER_CENTER);
                 return;
@@ -425,8 +468,8 @@ namespace ESLDCore
             Events["BeaconShutdown"].active = true;
             beaconStatus = "Active";
             ModuleAnimateGeneric MAG = part.FindModuleImplementing<ModuleAnimateGeneric>();
-            print("Activating beacon!  Toggling MAG from " + MAG.status + "-" + MAG.Progress);
-            print("EC Activation charge at " + neededEC + "(" + FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude + "/" + gLimitEff + ", " + fuelOnBoard + ")");
+            log.debug("Activating beacon!  Toggling MAG from " + MAG.status + "-" + MAG.Progress);
+            log.info("EC Activation charge at " + neededEC + "(" + FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude + "/" + gLimitEff + ")");
             if (MAG != null)
                 MAG.Toggle();
         }
@@ -441,14 +484,46 @@ namespace ESLDCore
             Events["BeaconShutdown"].active = false;
             Events["BeaconInitialize"].active = true;
             ModuleAnimateGeneric MAG = part.FindModuleImplementing<ModuleAnimateGeneric>();
-            print("Deactivating beacon!  Toggling MAG from " + MAG.status + "-" + MAG.Progress);
+            log.debug("Deactivating beacon!  Toggling MAG from " + MAG.status + "-" + MAG.Progress);
             if (MAG != null)
                 MAG.Toggle();
+        }
+
+        public override void OnSave(ConfigNode node)
+        {
+            base.OnSave(node);
+            foreach (ESLDJumpResource Jresource in jumpResources)
+            {
+                ConfigNode Rnode = new ConfigNode(RnodeName);
+                Rnode.AddValue("name", Jresource.name);
+                Rnode.AddValue("ratio", Jresource.ratio);
+                Rnode.AddValue("fuelOnBoard", Jresource.fuelOnBoard);
+                node.AddNode(Rnode);
+            }
         }
 
         public override void OnLoad(ConfigNode node)
         {
             base.OnLoad(node);
+            foreach (ConfigNode Rnode in node.GetNodes(RnodeName))
+            {
+                string Rname = Rnode.GetValue("name");
+                float Rratio = 1;
+                double RfuelOnBoard = 0;
+                if (float.TryParse(Rnode.GetValue("ratio"), out Rratio))
+                    Rratio = 1; // Rratio is already 1. Replace this with a log entry. FIXME!!
+                bool fuelCheck = double.TryParse(Rnode.GetValue("fuelOnBoard"), out RfuelOnBoard);
+                ESLDJumpResource Jresource = new ESLDJumpResource(Rname, Rratio, RfuelOnBoard);
+                Jresource.fuelCheck = fuelCheck;
+                jumpResources.Add(Jresource);
+            }
+            // Not sure if there should be a default resource...
+            if (jumpResources.Count == 0 && (beaconModel == "LB10" || beaconModel == "LB15" || beaconModel == "LB100" || beaconModel == "IB1"))
+            {
+                log.warning("Generating new ESLDJumpResource for legacy beacon savefile");
+                jumpResources.Add(new ESLDJumpResource("Karborundum", ratio: 1));
+            }
+
             if (activated) {
                 Fields["neededEC"].guiActive = false;
                 Fields["constantEC"].guiActive = true;
@@ -463,6 +538,48 @@ namespace ESLDCore
                 Events["BeaconShutdown"].active = false;
                 Events["BeaconInitialize"].active = true;
             }
+        }
+    }
+
+    public class ESLDJumpResource
+    {
+        public string name;
+        public float ratio = 1;
+        public double fuelOnBoard = 0;
+        public float ECMult = 1;
+        public bool fuelCheck = false;
+        
+        public ESLDJumpResource(string name, float ratio=1, double fuelOnBoard = 0, bool fuelCheck = false)
+        {
+            this.name = name;
+            this.ratio = ratio;
+            this.fuelOnBoard = fuelOnBoard;
+            if (fuelOnBoard != 0)
+                this.fuelCheck = true;
+            else
+                this.fuelCheck = fuelCheck;
+            switch (this.name)
+            {
+                case "Karborundum":
+                    this.ECMult = 1;
+                    break;
+                default:
+                    this.ECMult = 1;
+                    break;
+            }
+        }
+        
+        public double getFuelOnBoard(Vessel vessel)
+        {
+            fuelOnBoard = 0;
+            if (vessel == null)
+                return 0;
+            foreach(Part part in vessel.parts)
+            {
+                foreach (PartResource resource in part.Resources)
+                    if (resource.resourceName == this.name) fuelOnBoard += resource.amount;
+            }
+            return fuelOnBoard;
         }
     }
 }

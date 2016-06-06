@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -15,7 +15,7 @@ namespace ESLDCore
         public Vessel farBeaconVessel = null;
         public ESLDBeacon farBeacon = null;
         public string farBeaconModel = "";
-        public Dictionary<Vessel, ESLDBeacon> farTargets = new Dictionary<Vessel, ESLDBeacon>();
+        public Dictionary<ESLDBeacon, Vessel> farTargets = new Dictionary<ESLDBeacon, Vessel>();
         public Dictionary<ESLDBeacon, string> nearBeacons = new Dictionary<ESLDBeacon, string>();
         public double precision;
         public OrbitDriver oPredictDriver = null;
@@ -32,8 +32,10 @@ namespace ESLDCore
         public string currentBeaconDesc;
         public double HCUCost = 0;
         public HailerButton masterClass = null;
+        private ESLDJumpResource primaryResource = null;
         bool drawConfirmOn = false;
         bool drawGUIOn = false;
+        Logger log = new Logger("ESLDCore:ESLDHailer: ");
 
         // GUI Open?
         [KSPField(guiName = "GUIOpen", isPersistant = true, guiActive = false)]
@@ -48,8 +50,8 @@ namespace ESLDCore
         [KSPField(guiName = "Drift", guiActive = false, guiUnits = "m/s")]
         public double nearBeaconRelVel;
 
-        // Calculate Jump Offset
-        private Vector3d getJumpOffset(Vessel near, Vessel far, string model)
+        // Calculate Jump Velocity Offset
+        public static Vector3d getJumpVelOffset(Vessel near, Vessel far, ESLDBeacon beacon)
         {
             Vector3d farRealVelocity = far.orbit.vel;
             CelestialBody farRefbody = far.mainBody;
@@ -63,7 +65,7 @@ namespace ESLDCore
             if (near.mainBody.flightGlobalsIndex == far.mainBody.flightGlobalsIndex)
             {
                 farRealVelocity -= far.orbit.vel;
-//              print("In-system transfer, disregarding far beacon velocity.");
+//              log.debug("In-system transfer, disregarding far beacon velocity.");
             }
             while (nearRefbody.flightGlobalsIndex != 0) // Kerbol
             {
@@ -90,25 +92,22 @@ namespace ESLDCore
         }
 
         // Show exit orbital predictions
-        private void showExitOrbit(Vessel near, Vessel far, string model)
+        private void showExitOrbit(Vessel near, Vessel far)
         {
-            float baseWidth = 20.0f;
-            double baseStart = 10;
-            double baseEnd = 50;
             // Recenter map, save previous state.
             wasInMapView = MapView.MapIsEnabled;
             if (!MapView.MapIsEnabled) MapView.EnterMapView();
-            print("Finding target.");
+            log.debug("Finding target.");
             MapObject farTarget = findVesselBody(far);
             if (farTarget != null) MapView.MapCamera.SetTarget(farTarget);
             Vector3 mapCamPos = ScaledSpace.ScaledToLocalSpace(MapView.MapCamera.transform.position);
             Vector3 farTarPos = ScaledSpace.ScaledToLocalSpace(farTarget.transform.position);
             float dirScalar = Vector3.Distance(mapCamPos, farTarPos);
-            print("Initializing, camera distance is " + dirScalar);
+            log.debug("Initializing, camera distance is " + dirScalar);
 
             // Initialize projection stuff.
-            print("Beginning orbital projection.");
-            Vector3d exitTraj = getJumpOffset(near, far, model);
+            log.debug("Beginning orbital projection.");
+            Vector3d exitTraj = getJumpVelOffset(near, far, nearBeacon);
             oPredictDriver = new OrbitDriver();
             oPredictDriver.orbit = new Orbit();
             oPredictDriver.orbit.referenceBody = far.mainBody;
@@ -128,7 +127,7 @@ namespace ESLDCore
             oPredictDriver.Renderer = oPredict;
             
             // Splash some color on it.
-            print("Displaying orbital projection.");
+            log.debug("Displaying orbital projection.");
             oPredict.driver.drawOrbit = true;
             oPredict.driver.orbitColor = Color.red;
             oPredict.orbitColor = Color.red;
@@ -137,6 +136,9 @@ namespace ESLDCore
 
             // Directional indicator.
             /*
+            float baseWidth = 20.0f;
+            double baseStart = 10;
+            double baseEnd = 50;
             oDirObj = new GameObject("Indicator");
             oDirObj.layer = 10; // Map layer!
             oDirection = oDirObj.AddComponent<LineRenderer>();
@@ -147,7 +149,7 @@ namespace ESLDCore
                 if (sstr.name == far.mainBody.name)
                 {
                     oOrigin = sstr;
-                    print("Found origin: " + sstr.name);
+                    log.debug("Found origin: " + sstr.name);
                     break;
                 }
             }
@@ -157,12 +159,12 @@ namespace ESLDCore
             oDirection.SetColors(Color.clear, Color.red);
             if (dirScalar / 325000 > baseWidth) baseWidth = dirScalar / 325000f;
             oDirection.SetWidth(baseWidth, 0.01f);
-            print("Base Width set to " + baseWidth);
+            log.debug("Base Width set to " + baseWidth);
             oDirection.SetVertexCount(2);
             if (dirScalar / 650000 > baseStart) baseStart = dirScalar / 650000;
             if (dirScalar / 130000 > baseEnd) baseEnd = dirScalar / 130000;
-            print("Base Start set to " + baseStart);
-            print("Base End set to " + baseEnd);
+            log.debug("Base Start set to " + baseStart);
+            log.debug("Base End set to " + baseEnd);
             oDirection.SetPosition(0, Vector3d.zero + exitTraj.xzy.normalized * baseStart);
             oDirection.SetPosition(1, exitTraj.xzy.normalized * baseEnd);
             oDirection.enabled = true;
@@ -171,8 +173,10 @@ namespace ESLDCore
 
 
         // Update said predictions
-        private void updateExitOrbit(Vessel near, Vessel far, string model)
+        private void updateExitOrbit(Vessel near, Vessel far)
         {
+            // Orbit prediction is broken for now FIXME!!
+            /*
             float baseWidth = 20.0f;
             double baseStart = 10;
             double baseEnd = 50;
@@ -180,7 +184,7 @@ namespace ESLDCore
             MapObject farTarget = MapView.MapCamera.target;
             Vector3 farTarPos = ScaledSpace.ScaledToLocalSpace(farTarget.transform.position);
             float dirScalar = Vector3.Distance(mapCamPos, farTarPos);
-            Vector3d exitTraj = getJumpOffset(near, far, model);
+            Vector3d exitTraj = getJumpOffset(near, far, nearBeacon);
             oPredict.driver.referenceBody = far.mainBody;
             oPredict.driver.orbit.referenceBody = far.mainBody;
             oPredict.driver.pos = far.orbit.pos;
@@ -192,10 +196,11 @@ namespace ESLDCore
             oDirection.SetWidth(baseWidth, 0.01f);
             if (dirScalar / 650000 > baseStart) baseStart = dirScalar / 650000;
             if (dirScalar / 130000 > baseEnd) baseEnd = dirScalar / 130000;
-//          print("Camera distance is " + dirScalar + " results: " + baseWidth + " " + baseStart + " " + baseEnd);
+//          log.debug("Camera distance is " + dirScalar + " results: " + baseWidth + " " + baseStart + " " + baseEnd);
             oDirection.SetPosition(0, Vector3d.zero + exitTraj.xzy.normalized * baseStart);
             oDirection.SetPosition(1, exitTraj.xzy.normalized * baseEnd);
             oDirection.transform.eulerAngles = Vector3d.zero;
+            */
         }
 
         // Back out of orbital predictions.
@@ -218,14 +223,6 @@ namespace ESLDCore
                 }
             }*/
             if (MapView.MapIsEnabled && !wasInMapView) MapView.ExitMapView();
-        }
-
-        // Calculate AMU cost in units of Karborundum given two vessel endpoints and the tonnage of the transferring vessel.
-        private double getAMUCost(Vessel near, Vessel far, double tton, string model)
-        {
-            Vector3d velDiff = getJumpOffset(near, far, model) - far.orbit.vel;
-            double comp = velDiff.magnitude;
-            return Math.Round(((comp * tton) / Math.Pow(Math.Log10(comp * tton),2)) / 2) / 100;
         }
 
         // Find parts that need a HCU to transfer.
@@ -326,22 +323,23 @@ namespace ESLDCore
         public void listFarBeacons()
         {
             farTargets.Clear();
-            foreach (Vessel craft in FlightGlobals.Vessels)
+            foreach (Vessel craft in FlightGlobals.Vessels.FindAll(
+                (Vessel c) =>
+                c.loaded == false &&
+                c != vessel &&
+                c != FlightGlobals.ActiveVessel &&
+                c.situation == Vessel.Situations.ORBITING))
             {
-                if (craft.loaded == true) continue;
-                if (craft == vessel) continue;
-                if (craft == FlightGlobals.ActiveVessel) continue;
-                if (craft.situation != Vessel.Situations.ORBITING) continue;
                 foreach (ProtoPartSnapshot ppart in craft.protoVessel.protoPartSnapshots)
                 {
-                    foreach (ProtoPartModuleSnapshot pmod in ppart.modules)
+                    foreach (ProtoPartModuleSnapshot pmod in ppart.modules.FindAll(
+                        (ProtoPartModuleSnapshot p) => p.moduleName == "ESLDBeacon"))
                     {
-                        if (pmod.moduleName != "ESLDBeacon") continue;
                         if (pmod.moduleValues.GetValue("activated") == "True")
                         {
-                            ESLDBeacon protoBeacon = new ESLDBeacon(pmod.moduleValues);
+                            ESLDBeacon protoBeacon = new ESLDBeacon(pmod.moduleValues, ppart.partInfo.partConfig.GetNodes("MODULE")[ppart.modules.IndexOf(pmod)]);
                             protoBeacon.activated = true;
-                            farTargets.Add(craft, protoBeacon);
+                            farTargets.Add(protoBeacon, craft);
                         }
                     }
                 }
@@ -365,9 +363,12 @@ namespace ESLDCore
                 }
                 else
                 {
+                    if (nearBeacon.jumpResources.Count > 0)
+                        primaryResource = nearBeacon.jumpResources.ElementAt(0);
+                    else
+                        primaryResource = null;
                     Events["HailerGUIClose"].active = false;
                     Events["HailerGUIOpen"].active = true;
-                    if (guiopen) listFarBeacons();
                 }
             }
             
@@ -408,7 +409,7 @@ namespace ESLDCore
                 Vessel nbparent = nearBeacon.vessel;
                 string nbModel = nearBeacon.beaconModel;
                 nearBeacon.checkOwnTechBoxes();
-                double nbfuel = nearBeacon.fuelOnBoard;
+                //double nbfuel = nearBeacon.fuelOnBoard;
                 double driftpenalty = Math.Round(Math.Pow(Math.Floor(nearBeaconDistance / 200), 2) + Math.Floor(Math.Pow(nearBeaconRelVel, 1.5)) * nearBeacon.getCrewBonuses(nbparent,"Pilot",0.5,5));
                 if (driftpenalty > 0) GUILayout.Label("+" + driftpenalty + "% due to Drift.");
                 Dictionary<Part, string> HCUParts = getHCUParts(vessel);
@@ -418,9 +419,9 @@ namespace ESLDCore
                     if (vessel.GetCrewCount() > 0) GUILayout.Label("Transfer will kill crew.");
                     if (HCUParts.Count > 0) GUILayout.Label("Some resources will destabilize.");
                 }
-                foreach (KeyValuePair<Vessel, ESLDBeacon> ftarg in farTargets)
+                foreach (KeyValuePair<ESLDBeacon, Vessel> ftarg in farTargets)
                 {
-                    double tripdist = Vector3d.Distance(nbparent.GetWorldPos3D(), ftarg.Key.GetWorldPos3D());
+                    double tripdist = Vector3d.Distance(nbparent.GetWorldPos3D(), ftarg.Value.GetWorldPos3D());
                     double tripcost = nearBeacon.getTripBaseCost(tripdist, tonnage);
                     double sciBonus = nearBeacon.getCrewBonuses(nbparent, "Scientist", 0.5, 5);
                     if (nearBeacon.hasSCU)
@@ -437,20 +438,29 @@ namespace ESLDCore
                     }
                     if (tripcost == 0) continue;
                     tripcost += tripcost * (driftpenalty * .01);
-                    if (nearBeacon.hasAMU) tripcost += getAMUCost(vessel, ftarg.Key, tonnage, nearBeacon.beaconModel);
+                    if (nearBeacon.hasAMU) tripcost += nearBeacon.getAMUCost(vessel, ftarg.Value, tonnage);
                     double adjHCUCost = HCUCost;
                     if (nearBeacon.beaconModel == "IB1") adjHCUCost = Math.Round((HCUCost - (tripcost * 0.02)) * 100) / 100;
                     if (nearBeacon.hasHCU) tripcost += adjHCUCost;
                     tripcost = Math.Round(tripcost * 100) / 100;
-                    string targetSOI = ftarg.Key.mainBody.name;
-                    double targetAlt = Math.Round(ftarg.Key.altitude / 1000);
+                    string targetSOI = ftarg.Value.mainBody.name;
+                    double targetAlt = Math.Round(ftarg.Value.altitude / 1000);
                     GUIStyle fuelstate = buttonNoFuel;
                     string blockReason = "";
                     string blockRock = "";
-                    if (tripcost <= nbfuel) // Show blocked status only for otherwise doable transfers.
+                    bool affordable = true;
+                    foreach (ESLDJumpResource Jresource in nearBeacon.jumpResources)
+                    {
+                        if (tripcost * Jresource.ratio > Jresource.fuelOnBoard)
+                        {
+                            affordable = false;
+                            break;
+                        }
+                    }
+                    if (affordable) // Show blocked status only for otherwise doable transfers.
                     {
                         fuelstate = buttonHasFuel;
-                        KeyValuePair<string, CelestialBody> checkpath = masterClass.HasTransferPath(nbparent, ftarg.Key, nearBeacon.gLimitEff);
+                        KeyValuePair<string, CelestialBody> checkpath = masterClass.HasTransferPath(nbparent, ftarg.Value, nearBeacon.gLimitEff);
                         if (checkpath.Key != "OK")
                         {
                             fuelstate = buttonNoPath;
@@ -458,15 +468,15 @@ namespace ESLDCore
                             blockRock = checkpath.Value.name;
                         }
                     }
-                    if (GUILayout.Button(ftarg.Value + " " + ftarg.Key.vesselName + "(" + targetSOI + ", " + targetAlt + "km) | " + tripcost, fuelstate))
+                    if (GUILayout.Button(ftarg.Key.beaconModel + " " + ftarg.Value.vesselName + "(" + targetSOI + ", " + targetAlt + "km) | " + tripcost, fuelstate))
                     {
                         if (fuelstate == buttonHasFuel)
                         {
-                            farBeaconVessel = ftarg.Key;
-                            farBeacon = ftarg.Value;
+                            farBeaconVessel = ftarg.Value;
+                            farBeacon = ftarg.Key;
                             farBeaconModel = farBeacon.beaconModel;
                             drawConfirm();
-                            if (!nearBeacon.hasAMU) showExitOrbit(vessel, farBeaconVessel, nearBeacon.beaconModel);
+                            if (!nearBeacon.hasAMU) showExitOrbit(vessel, farBeaconVessel);
                             //RenderingManager.AddToPostDrawQueue(4, new Callback(drawConfirm));
                             drawConfirmOn = true;
                             //RenderingManager.RemoveFromPostDrawQueue(3, new Callback(drawGUI));
@@ -476,12 +486,22 @@ namespace ESLDCore
                         }
                         else
                         {
-                            print("Current beacon has a g limit of " + nearBeacon.gLimitEff);
-                            string messageToPost = "Cannot Warp: Origin beacon has " + nbfuel + " of " + tripcost + " Karborundum required to warp.";
+                            log.info("Current beacon has a g limit of " + nearBeacon.gLimitEff);
+                            string messageToPost = "I can't tell why the jump won't work. Please report this error.";
+                            if (!affordable)
+                            {
+                                foreach(ESLDJumpResource Jresource in nearBeacon.jumpResources)
+                                {
+                                    if (tripcost * Jresource.ratio <= Jresource.fuelOnBoard)
+                                        continue;
+                                    messageToPost = "Cannot Warp: Origin beacon has " + Jresource.fuelOnBoard + " of " + tripcost * Jresource.ratio + " " + Jresource.name + " required to warp.";
+                                }
+                            }
                             string thevar = (blockRock == "Mun" || blockRock == "Sun") ? "the " : string.Empty;
                             if (fuelstate == buttonNoPath && blockReason == "Gravity") messageToPost = "Cannot Warp: Path of transfer intersects a high-gravity area around " + thevar + blockRock + ".";
                             if (fuelstate == buttonNoPath && blockReason == "Proximity") messageToPost = "Cannot Warp: Path of transfer passes too close to " + thevar + blockRock + ".";
                             ScreenMessages.PostScreenMessage(messageToPost, 5.0f, ScreenMessageStyle.UPPER_CENTER);
+                            log.debug(messageToPost);
                         }
                     }
                 }
@@ -523,7 +543,6 @@ namespace ESLDCore
             GUIStyle labelNoFuel = new GUIStyle(GUI.skin.label);
             labelNoFuel.normal.textColor = Color.red;
             GUILayout.BeginVertical(HighLogic.Skin.scrollView);
-
             if (nearBeacon != null)
             {
                 double tripdist = Vector3d.Distance(nearBeacon.vessel.GetWorldPos3D(), farBeaconVessel.GetWorldPos3D());
@@ -549,7 +568,15 @@ namespace ESLDCore
                 }
                 GUILayout.Label("Confirm Warp:");
                 var basecost = Math.Round(tripcost * 100) / 100;
-                GUILayout.Label("Base Cost: " + basecost + " Karborundum.");
+                string tempLabel;
+                tempLabel = "Base Cost: ";
+                foreach (ESLDJumpResource Jresource in nearBeacon.jumpResources)
+                {
+                    tempLabel += basecost * Jresource.ratio + " " + Jresource.name;
+                    if (nearBeacon.jumpResources.IndexOf(Jresource) + 1 < nearBeacon.jumpResources.Count())
+                        tempLabel += ", ";
+                }
+                GUILayout.Label(tempLabel + ".");
                 double sciBonus = nearBeacon.getCrewBonuses(nbparent, "Scientist", 0.5, 5);
                 if (nearBeacon.hasSCU)
                 {
@@ -571,18 +598,39 @@ namespace ESLDCore
                 tripcost = Math.Round(tripcost * 100) / 100;
                 if (nearBeacon.hasAMU)
                 {
-                    double AMUCost = getAMUCost(vessel, farBeaconVessel, tonnage, nearBeacon.beaconModel);
-                    GUILayout.Label("AMU Compensation adds " + AMUCost + " Karborundum.");
+                    double AMUCost = nearBeacon.getAMUCost(vessel, farBeaconVessel, tonnage);
+                    tempLabel = "AMU Compensation adds ";
+                    foreach (ESLDJumpResource Jresource in nearBeacon.jumpResources)
+                    {
+                        tempLabel += AMUCost * Jresource.ratio + " " + Jresource.name;
+                        if (nearBeacon.jumpResources.IndexOf(Jresource) + 1 < nearBeacon.jumpResources.Count())
+                            tempLabel += ", ";
+                    }
+                    GUILayout.Label(tempLabel + ".");
                     tripcost += AMUCost;
                 }
                 if (nearBeacon.hasHCU)
                 {
                     double adjHCUCost = HCUCost;
                     if (nearBeacon.beaconModel == "IB1") adjHCUCost = Math.Round((HCUCost - (tripcost * 0.02)) * 100) / 100;
-                    GUILayout.Label("HCU Shielding adds " + adjHCUCost + " Karborundum.");
+                    tempLabel = "HCU Shielding adds ";
+                    foreach (ESLDJumpResource Jresource in nearBeacon.jumpResources)
+                    {
+                        tempLabel += adjHCUCost * Jresource.ratio + " " + Jresource.name;
+                        if (nearBeacon.jumpResources.IndexOf(Jresource) + 1 < nearBeacon.jumpResources.Count())
+                            tempLabel += ", ";
+                    }
+                    GUILayout.Label(tempLabel + ".");
                     tripcost += adjHCUCost;
                 }
-                GUILayout.Label("Total Cost: " + tripcost + " Karborundum.");
+                tempLabel = "Total Cost: ";
+                foreach (ESLDJumpResource Jresource in nearBeacon.jumpResources)
+                {
+                    tempLabel += tripcost * Jresource.ratio + " " + Jresource.name;
+                    if (nearBeacon.jumpResources.IndexOf(Jresource) + 1 < nearBeacon.jumpResources.Count())
+                        tempLabel += ", ";
+                }
+                GUILayout.Label(tempLabel + ".");
                 GUILayout.Label("Destination: " + farBeaconVessel.mainBody.name + " at " + Math.Round(farBeaconVessel.altitude / 1000) + "km.");
                 precision = farBeacon.getTripSpread(tripdist);
                 GUILayout.Label("Transfer will emerge within " + precision + "m of destination beacon.");
@@ -592,42 +640,72 @@ namespace ESLDCore
                 }
                 if (!nearBeacon.hasAMU)
                 {
-                    Vector3d transferVelOffset = getJumpOffset(vessel, farBeaconVessel, nearBeacon.beaconModel) - farBeaconVessel.orbit.vel;
+                    Vector3d transferVelOffset = getJumpVelOffset(vessel, farBeaconVessel, nearBeacon) - farBeaconVessel.orbit.vel;
                     GUILayout.Label("Velocity relative to exit beacon will be " + Math.Round(transferVelOffset.magnitude) + "m/s.");
                 }
                 double retTripCost = 0;
-                double checkfuel = 0;
                 bool fuelcheck = false;
-                foreach (ProtoPartSnapshot ppart in farBeaconVessel.protoVessel.protoPartSnapshots)
+                bool affordReturn = true;
+                ESLDBeacon cheapFarBeacon = new ESLDBeacon();
+                List<ESLDBeacon> beaconsOnFarBeaconVessel = farTargets.Where(p => p.Value == farBeaconVessel).Select(p => p.Key).ToList();
+                foreach (ESLDBeacon tempFarBeacon in beaconsOnFarBeaconVessel)
                 {
-                    foreach (ProtoPartModuleSnapshot pmod in ppart.modules)
+                    if (retTripCost == 0)
                     {
-                        if (pmod.moduleName == "ESLDBeacon" && pmod.moduleValues.GetValue("beaconStatus") == "Active.")
+                        retTripCost = tempFarBeacon.getTripBaseCost(tripdist, tonnage);
+                        cheapFarBeacon = tempFarBeacon;
+                    }
+                    else
+                    {
+                        double tempCost = tempFarBeacon.getTripBaseCost(tripdist, tonnage);
+                        if (tempCost < retTripCost)
                         {
-                            fuelcheck = double.TryParse(pmod.moduleValues.GetValue("fuelOnBoard"), out checkfuel);
-                            if (retTripCost == 0) {
-                                retTripCost = new ESLDBeacon(pmod.moduleValues).getTripBaseCost (tripdist, tonnage);
-                            } else {
-                                retTripCost = Math.Min (retTripCost, new ESLDBeacon(pmod.moduleValues).getTripBaseCost(tripdist, tonnage));
-                            }
-                            //if (retTripCost < getTripBaseCost(tripdist, tonnage, pmodel, pMF, pcoef, pdistPow, pmassExp, pbaseMult, pdistpenalty)) retTripCost = getTripBaseCost(tripdist, tonnage, pmodel, pMF, pcoef, pdistPow, pmassExp, pbaseMult, pdistpenalty);
+                            retTripCost = tempCost;
+                            cheapFarBeacon = tempFarBeacon;
                         }
                     }
                 }
+                fuelcheck = cheapFarBeacon.jumpResources.All((ESLDJumpResource jr) => jr.fuelCheck);
                 string fuelmessage = "Destination beacon's fuel could not be checked.";
-                if (fuelcheck) fuelmessage = "Destination beacon has " + checkfuel + " Karborundum.";
-                GUILayout.Label(fuelmessage);
+                if (fuelcheck)
+                {
+                    fuelmessage = "Destination beacon has ";
+                    foreach (ESLDJumpResource Jresource in cheapFarBeacon.jumpResources)
+                    {
+                        fuelmessage += Jresource.fuelOnBoard + " " + Jresource.name;
+                        if (cheapFarBeacon.jumpResources.IndexOf(Jresource) + 1 < nearBeacon.jumpResources.Count())
+                            fuelmessage += ", ";
+                        if (retTripCost * Jresource.ratio > Jresource.fuelOnBoard)
+                            affordReturn = false;
+                    }
+                }
+                GUILayout.Label(fuelmessage+".");
                 retTripCost = Math.Round(retTripCost * 100) / 100;
-                if (retTripCost <= checkfuel)
+                if (fuelcheck && affordReturn)
                 {
-                    GUILayout.Label("Destination beacon can make return trip using " + retTripCost + " (base cost) Karborundum.", labelHasFuel);
+                    tempLabel = "Destination beacon can make return trip using ";
+                    foreach (ESLDJumpResource Jresource in cheapFarBeacon.jumpResources)
+                    {
+                        tempLabel += retTripCost * Jresource.ratio + " " + Jresource.name;
+                        if (cheapFarBeacon.jumpResources.IndexOf(Jresource) + 1 < nearBeacon.jumpResources.Count())
+                            tempLabel += ", ";
+                    }
+                    tempLabel += " (base cost).";
+                    GUILayout.Label(tempLabel, labelHasFuel);
                 }
-                else
+                else if (fuelcheck)
                 {
-                    GUILayout.Label("Destination beacon would need  " + retTripCost + " (base cost) Karborundum for return trip using active beacons.", labelNoFuel);
+                    tempLabel = "Destination beacon would need ";
+                    foreach (ESLDJumpResource Jresource in cheapFarBeacon.jumpResources)
+                    {
+                        tempLabel += retTripCost * Jresource.ratio + " " + Jresource.name;
+                        if (cheapFarBeacon.jumpResources.IndexOf(Jresource) + 1 < nearBeacon.jumpResources.Count())
+                            tempLabel += ", ";
+                    }
+                    tempLabel += " (base cost) for return trip using active beacons.";
+                    GUILayout.Label(tempLabel, labelNoFuel);
                 }
-                // Orbit prediction is broken for now FIXME!!
-                //if (oPredict != null) updateExitOrbit(vessel, farBeacon, nearBeacon.beaconModel);
+                if (oPredict != null) updateExitOrbit(vessel, farBeaconVessel);
                 if (GUILayout.Button("Confirm and Warp", buttonNeutral))
                 {
                     //RenderingManager.RemoveFromPostDrawQueue(4, new Callback(drawConfirm));
@@ -639,10 +717,13 @@ namespace ESLDCore
                     bool finalPathCheck = false;
                     if (checkpath.Key == "OK") finalPathCheck = true;
                     // Check fuel one last time.
-                    fuelcheck = false;
-                    fuelcheck = nearBeacon.requireResource(nbparent, "Karborundum", tripcost, true);
-                    if (fuelcheck && finalPathCheck) // Fuel is paid for and path is clear.
+                    fuelcheck = nearBeacon.jumpResources.All((ESLDJumpResource Jresource) =>
+                        nearBeacon.requireResource(nbparent, Jresource.name, tripcost * Jresource.ratio, false));
+                    if (fuelcheck && finalPathCheck) // Fuel is valid for and path is clear.
                     {
+                        // Pay fuel
+                        foreach (ESLDJumpResource Jresource in nearBeacon.jumpResources)
+                            nearBeacon.requireResource(nbparent, Jresource.name, tripcost * Jresource.ratio, true);
                         // Buckle up!
                         if (!nearBeacon.hasHCU) // Penalize for HCU not being present/online.
                         {
@@ -692,7 +773,7 @@ namespace ESLDCore
                             }
                         }
                         masterClass.dazzle();
-                        Vector3d transferVelOffset = getJumpOffset(vessel, farBeaconVessel, nearBeacon.beaconModel);
+                        Vector3d transferVelOffset = getJumpVelOffset(vessel, farBeaconVessel, nearBeacon);
                         if (nearBeacon.hasAMU) transferVelOffset = farBeaconVessel.orbit.vel;
                         Vector3d spread = ((UnityEngine.Random.onUnitSphere + UnityEngine.Random.insideUnitSphere) / 2) * (float)precision;
 
@@ -735,7 +816,7 @@ namespace ESLDCore
 //                        nbparent.GoOnRails();
 //                        vessel.GoOnRails();
 //                        vessel.situation = Vessel.Situations.ORBITING;
-//                        vessel.orbit.UpdateFromStateVectors(farBeacon.orbit.pos + spread, transferVelOffset, farBeacon.mainBody, Planetarium.GetUniversalTime());
+//                        vessel.orbit.UpdateFromStateVectors(farBeaconVessel.orbit.pos + spread, transferVelOffset, farBeaconVessel.mainBody, Planetarium.GetUniversalTime());
 //                        vessel.orbit.Init();
 //                        vessel.orbit.UpdateFromUT(Planetarium.GetUniversalTime());
 //                        vessel.orbitDriver.pos = vessel.orbit.pos.xzy;
@@ -782,10 +863,14 @@ namespace ESLDCore
                 drawGUI();
             if (drawConfirmOn)
                 drawConfirm();
+            if (!drawGUIOn && !drawConfirmOn)
+                farTargets.Clear();
         }
 
         private void drawGUI()
         {
+            if (farTargets.Count() == 0)
+                listFarBeacons();
             BeaconWindow = GUILayout.Window(1, BeaconWindow, BeaconInterface, "Warp Information", GUILayout.MinWidth(400), GUILayout.MinHeight(200));
             if ((BeaconWindow.x == 0) && (BeaconWindow.y == 0))
             {
@@ -810,7 +895,6 @@ namespace ESLDCore
             Events["HailerActivate"].active = false;
             Events["HailerDeactivate"].active = true;
             ScanForNearBeacons();
-            listFarBeacons();
         }
         [KSPEvent(name = "HailerGUIOpen", active = false, guiActive = true, guiName = "Beacon Interface")]
         public void HailerGUIOpen()
