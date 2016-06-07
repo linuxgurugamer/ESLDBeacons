@@ -9,6 +9,12 @@ namespace ESLDCore
 {
     public class ESLDBeacon : PartModule
     {
+        // Activation animation
+        [KSPField]
+        public string animationName = "";
+
+        protected Animation anim;
+
         // Display beacon status in right click menu.
         [KSPField(guiName = "Beacon Status", guiActive = true)]
         public string beaconStatus;
@@ -157,7 +163,7 @@ namespace ESLDCore
             opFloor = findAcceptableAltitude(vessel.mainBody); // Keep updating tooltip display.
             if (FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude <= gLimitEff) Fields["neededEC"].guiActive = !activated;
             Fields["constantEC"].guiActive = activated;
-            ModuleAnimateGeneric MAG = part.FindModuleImplementing<ModuleAnimateGeneric>();
+            /*ModuleAnimateGeneric MAG = part.FindModuleImplementing<ModuleAnimateGeneric>();
             if (MAG != null) {
                 MAG.Events["Toggle"].guiActive = false;
                 if (activated && MAG.Progress == 0 && !MAG.IsMoving())
@@ -168,7 +174,7 @@ namespace ESLDCore
                 {
                     MAG.Toggle();
                 }
-            }
+            }*/
             foreach (ESLDJumpResource Jresource in jumpResources)
                 Jresource.getFuelOnBoard(vessel);
         }
@@ -467,26 +473,35 @@ namespace ESLDCore
             Events["BeaconInitialize"].active = false;
             Events["BeaconShutdown"].active = true;
             beaconStatus = "Active";
-            ModuleAnimateGeneric MAG = part.FindModuleImplementing<ModuleAnimateGeneric>();
-            log.debug("Activating beacon!  Toggling MAG from " + MAG.status + "-" + MAG.Progress);
             log.info("EC Activation charge at " + neededEC + "(" + FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude + "/" + gLimitEff + ")");
+            if(anim!=null)
+            {
+                anim[animationName].normalizedSpeed = 1f;
+                anim.Play(animationName);
+            }
+            /*ModuleAnimateGeneric MAG = part.FindModuleImplementing<ModuleAnimateGeneric>();
+            log.debug("Activating beacon!  Toggling MAG from " + MAG.status + "-" + MAG.Progress);
             if (MAG != null)
-                MAG.Toggle();
+                MAG.Toggle();*/
         }
 
         [KSPEvent(name = "BeaconShutdown", active = false, guiActive = true, guiName = "Shutdown")]
         public void BeaconShutdown()
         {
             beaconStatus = "Offline";
-            part.deactivate();
             activated = false;
             Fields["constantEC"].guiActive = false;
             Events["BeaconShutdown"].active = false;
             Events["BeaconInitialize"].active = true;
-            ModuleAnimateGeneric MAG = part.FindModuleImplementing<ModuleAnimateGeneric>();
+            if (anim != null)
+            {
+                anim[animationName].normalizedSpeed = -1f;
+                anim.Play(animationName);
+            }
+            /*ModuleAnimateGeneric MAG = part.FindModuleImplementing<ModuleAnimateGeneric>();
             log.debug("Deactivating beacon!  Toggling MAG from " + MAG.status + "-" + MAG.Progress);
             if (MAG != null)
-                MAG.Toggle();
+                MAG.Toggle();*/
         }
 
         public override void OnSave(ConfigNode node)
@@ -532,11 +547,36 @@ namespace ESLDCore
                 beaconStatus = "Active";
             } else {
                 beaconStatus = "Offline";
-                part.deactivate();
                 activated = false;
                 Fields["constantEC"].guiActive = false;
                 Events["BeaconShutdown"].active = false;
                 Events["BeaconInitialize"].active = true;
+            }
+        }
+
+        public override void OnStart(StartState state)
+        {
+            if (animationName != "")
+            {
+                anim = part.FindModelAnimators(animationName).FirstOrDefault();
+                if (anim == null)
+                    log.warning("Animation not found! " + animationName);
+                else
+                {
+                    log.debug("Animation found: " + animationName);
+                    anim[animationName].wrapMode = WrapMode.Once;
+                    if (activated)
+                    {
+                        anim[animationName].normalizedTime = 1;
+                        anim.Play(animationName);
+                    }
+                    else
+                    {
+                        anim[animationName].normalizedTime = 0;
+                        anim[animationName].normalizedSpeed = -10;
+                        anim.Play(animationName);
+                    }
+                }
             }
         }
     }

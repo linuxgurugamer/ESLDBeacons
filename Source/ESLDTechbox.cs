@@ -9,6 +9,11 @@ namespace ESLDCore
 {
     public class ESLDTechbox : PartModule
     {
+        [KSPField]
+        public string animationName = "";
+
+        Animation anim;
+
         [KSPField(guiName = "Status", isPersistant = true, guiActive = true)]
         public string techBoxStatus;
 
@@ -18,21 +23,7 @@ namespace ESLDCore
         [KSPField(isPersistant = true, guiActive = false)]
         public string techBoxModel;
 
-        public override void OnUpdate()
-        {
-            ModuleAnimateGeneric MAG = part.FindModuleImplementing<ModuleAnimateGeneric>();
-            if (MAG != null) {
-                MAG.Events["Toggle"].guiActive = false;
-                if (activated && MAG.Progress == 0 && !MAG.IsMoving())
-                {
-                    MAG.Toggle();
-                }
-                else if (!activated && MAG.Progress == 1 && !MAG.IsMoving())
-                {
-                    MAG.Toggle();
-                }
-            }
-        }
+        Logger log = new Logger("ESLDCore:ESLDTechbox: ");
 
         [KSPEvent(name = "TechBoxOn", active = true, guiActive = true, guiName = "Activate")]
         public void TechBoxOn()
@@ -46,12 +37,16 @@ namespace ESLDCore
             {
                 beacon.checkOwnTechBoxes();
             }
+            if (anim != null)
+            {
+                anim[animationName].normalizedSpeed = 1f;
+                anim.Play(animationName);
+            }
         }
-        
+
         [KSPEvent(name = "TechBoxOff", active = false, guiActive = true, guiName = "Deactivate")]
         public void TechBoxOff()
         {
-            part.deactivate();
             activated = false;
             techBoxStatus = techBoxModel + " Inactive.";
             Events["TechBoxOn"].active = true;
@@ -59,6 +54,37 @@ namespace ESLDCore
             foreach (ESLDBeacon beacon in vessel.FindPartModulesImplementing<ESLDBeacon>())
             {
                 beacon.checkOwnTechBoxes();
+            }
+            if (anim != null)
+            {
+                anim[animationName].normalizedSpeed = -1f;
+                anim.Play(animationName);
+            }
+        }
+
+        public override void OnStart(StartState state)
+        {
+            if (animationName != "")
+            {
+                anim = part.FindModelAnimators(animationName).FirstOrDefault();
+                if (anim == null)
+                    log.warning("Animation not found! " + animationName);
+                else
+                {
+                    log.debug("Animation found: " + animationName);
+                    anim[animationName].wrapMode = WrapMode.Once;
+                    if (activated)
+                    {
+                        anim[animationName].normalizedTime = 1;
+                        anim.Play(animationName);
+                    }
+                    else
+                    {
+                        anim[animationName].normalizedTime = 0;
+                        anim[animationName].normalizedSpeed = -10;
+                        anim.Play(animationName);
+                    }
+                }
             }
         }
     }

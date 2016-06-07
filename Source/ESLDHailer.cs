@@ -917,7 +917,6 @@ namespace ESLDCore
         [KSPEvent(name = "HailerDeactivate", active = false, guiActive = true, guiName = "Shut Down Hailer")]
         public void HailerDeactivate()
         {
-//          part.deactivate();
             isActive = false;
             if (oPredict != null) hideExitOrbit(oPredict);
             HailerGUIClose();
