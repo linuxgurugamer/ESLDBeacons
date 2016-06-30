@@ -20,8 +20,11 @@ namespace ESLDCore
         [KSPField(isPersistant = true, guiActive = false)]
         public bool activated = false;
 
-        [KSPField(isPersistant = true, guiActive = false)]
+        [KSPField(guiActive = false)]
         public string techBoxModel;
+
+        [KSPField]
+        public bool alwaysActive = false;
 
         Logger log = new Logger("ESLDCore:ESLDTechbox: ");
 

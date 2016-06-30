@@ -9,6 +9,20 @@ namespace ESLDCore
 {
     public class ESLDHailer : PartModule
     {
+        public static Dictionary<string, float> highEnergyResources = new Dictionary<string, float>()
+        {
+            // CRP/USI Curated Resources
+            {"Karborundum", 1}, {"Uraninite", 0.8f},
+            // NFT Curated Resources
+            {"DepletedUranium", 0.3f}, {"EnrichedUranium", 0.7f},
+            // KSPI-E Curated Resources
+            {"Actinides", 0.6f}, {"Antimatter", 1}, {"ChargedParticles", 1}, {"DepletedFuel", 0.3f},
+            {"ExoticMatter", 1}, {"Fluorine", 0.4f}, {"LqdHe3", 0.6f}, {"LqdTritium", 0.8f},
+            {"Plutonium-238", 0.8f}, {"ThF4", 1}, {"UraniumNitride", 0.65f}, {"VacuumPlasma", 1},
+            // Possibly Deprecated Resources
+            {"Uranium", 0.7f}, {"Thorium", 0.6f}
+        };
+
         protected Rect BeaconWindow;
         protected Rect ConfirmWindow;
         public ESLDBeacon nearBeacon = null;
@@ -30,9 +44,7 @@ namespace ESLDCore
         public bool isActive = false;
         public int currentBeaconIndex;
         public string currentBeaconDesc;
-        public double HCUCost = 0;
-        public HailerButton masterClass = null;
-        private ESLDJumpResource primaryResource = null;
+        public HailerButton hailerButton = null;
         bool drawConfirmOn = false;
         bool drawGUIOn = false;
         Logger log = new Logger("ESLDCore:ESLDHailer: ");
@@ -50,202 +62,21 @@ namespace ESLDCore
         [KSPField(guiName = "Drift", guiActive = false, guiUnits = "m/s")]
         public double nearBeaconRelVel;
 
-        // Calculate Jump Velocity Offset
-        public static Vector3d getJumpVelOffset(Vessel near, Vessel far, ESLDBeacon beacon)
-        {
-            Vector3d farRealVelocity = far.orbit.vel;
-            CelestialBody farRefbody = far.mainBody;
-            while (farRefbody.flightGlobalsIndex != 0) // Kerbol
-            {
-                farRealVelocity += farRefbody.orbit.vel;
-                farRefbody = farRefbody.referenceBody;
-            }
-            Vector3d nearRealVelocity = near.orbit.vel;
-            CelestialBody nearRefbody = near.mainBody;
-            if (near.mainBody.flightGlobalsIndex == far.mainBody.flightGlobalsIndex)
-            {
-                farRealVelocity -= far.orbit.vel;
-//              log.debug("In-system transfer, disregarding far beacon velocity.");
-            }
-            while (nearRefbody.flightGlobalsIndex != 0) // Kerbol
-            {
-                nearRealVelocity += nearRefbody.orbit.vel;
-                nearRefbody = nearRefbody.referenceBody;
-            }
-            return nearRealVelocity - farRealVelocity;
-        }
-
-        // Mapview Utility
-        private MapObject findVesselBody(Vessel craft)
-        {
-            int cInst = craft.mainBody.GetInstanceID();
-//          foreach (MapObject mobj in MapView.FindObjectsOfType<MapObject>())
-            foreach (MapObject mobj in MapView.MapCamera.targets)
-            {
-                if (mobj.celestialBody == null) continue;
-                if (mobj.celestialBody.GetInstanceID() == cInst)
-                {
-                    return mobj;
-                }
-            }
-            return null;
-        }
-
-        // Show exit orbital predictions
-        private void showExitOrbit(Vessel near, Vessel far)
-        {
-            // Recenter map, save previous state.
-            wasInMapView = MapView.MapIsEnabled;
-            if (!MapView.MapIsEnabled) MapView.EnterMapView();
-            log.debug("Finding target.");
-            MapObject farTarget = findVesselBody(far);
-            if (farTarget != null) MapView.MapCamera.SetTarget(farTarget);
-            Vector3 mapCamPos = ScaledSpace.ScaledToLocalSpace(MapView.MapCamera.transform.position);
-            Vector3 farTarPos = ScaledSpace.ScaledToLocalSpace(farTarget.transform.position);
-            float dirScalar = Vector3.Distance(mapCamPos, farTarPos);
-            log.debug("Initializing, camera distance is " + dirScalar);
-
-            // Initialize projection stuff.
-            log.debug("Beginning orbital projection.");
-            Vector3d exitTraj = getJumpVelOffset(near, far, nearBeacon);
-            oPredictDriver = new OrbitDriver();
-            oPredictDriver.orbit = new Orbit();
-            oPredictDriver.orbit.referenceBody = far.mainBody;
-            oPredictDriver.referenceBody = far.mainBody;
-            oPredictDriver.upperCamVsSmaRatio = 999999;  // Took forever to figure this out - this sets at what zoom level the orbit appears.  Was causing it not to appear at small bodies.
-            oPredictDriver.lowerCamVsSmaRatio = 0.0001f;
-            oPredictDriver.orbit.UpdateFromStateVectors(far.orbit.pos, exitTraj, far.mainBody, Planetarium.GetUniversalTime());
-            oPredictDriver.orbit.Init();
-            Vector3d p = oPredictDriver.orbit.getRelativePositionAtUT(Planetarium.GetUniversalTime());
-            Vector3d v = oPredictDriver.orbit.getOrbitalVelocityAtUT(Planetarium.GetUniversalTime());
-            oPredictDriver.orbit.h = Vector3d.Cross(p, v);
-            oPredict = MapView.MapCamera.gameObject.AddComponent<OrbitRenderer>();
-            oPredict.upperCamVsSmaRatio = 999999;
-            oPredict.lowerCamVsSmaRatio = 0.0001f;
-            oPredict.celestialBody = far.mainBody;
-            oPredict.driver = oPredictDriver;
-            oPredictDriver.Renderer = oPredict;
-            
-            // Splash some color on it.
-            log.debug("Displaying orbital projection.");
-            oPredict.driver.drawOrbit = true;
-            oPredict.driver.orbitColor = Color.red;
-            oPredict.orbitColor = Color.red;
-            oPredict.drawIcons = OrbitRenderer.DrawIcons.OBJ_PE_AP;
-            oPredict.drawMode = OrbitRenderer.DrawMode.REDRAW_AND_RECALCULATE;
-
-            // Directional indicator.
-            /*
-            float baseWidth = 20.0f;
-            double baseStart = 10;
-            double baseEnd = 50;
-            oDirObj = new GameObject("Indicator");
-            oDirObj.layer = 10; // Map layer!
-            oDirection = oDirObj.AddComponent<LineRenderer>();
-            oDirection.useWorldSpace = false;
-            oOrigin = null;
-            foreach (Transform sstr in ScaledSpace.Instance.scaledSpaceTransforms)
-            {
-                if (sstr.name == far.mainBody.name)
-                {
-                    oOrigin = sstr;
-                    log.debug("Found origin: " + sstr.name);
-                    break;
-                }
-            }
-            oDirection.transform.parent = oOrigin;
-            oDirection.transform.position = ScaledSpace.LocalToScaledSpace(far.transform.position);
-            oDirection.material = new Material(Shader.Find("Particles/Additive"));
-            oDirection.SetColors(Color.clear, Color.red);
-            if (dirScalar / 325000 > baseWidth) baseWidth = dirScalar / 325000f;
-            oDirection.SetWidth(baseWidth, 0.01f);
-            log.debug("Base Width set to " + baseWidth);
-            oDirection.SetVertexCount(2);
-            if (dirScalar / 650000 > baseStart) baseStart = dirScalar / 650000;
-            if (dirScalar / 130000 > baseEnd) baseEnd = dirScalar / 130000;
-            log.debug("Base Start set to " + baseStart);
-            log.debug("Base End set to " + baseEnd);
-            oDirection.SetPosition(0, Vector3d.zero + exitTraj.xzy.normalized * baseStart);
-            oDirection.SetPosition(1, exitTraj.xzy.normalized * baseEnd);
-            oDirection.enabled = true;
-             */
-        }
-
-
-        // Update said predictions
-        private void updateExitOrbit(Vessel near, Vessel far)
-        {
-            // Orbit prediction is broken for now FIXME!!
-            /*
-            float baseWidth = 20.0f;
-            double baseStart = 10;
-            double baseEnd = 50;
-            Vector3 mapCamPos = ScaledSpace.ScaledToLocalSpace(MapView.MapCamera.transform.position);
-            MapObject farTarget = MapView.MapCamera.target;
-            Vector3 farTarPos = ScaledSpace.ScaledToLocalSpace(farTarget.transform.position);
-            float dirScalar = Vector3.Distance(mapCamPos, farTarPos);
-            Vector3d exitTraj = getJumpOffset(near, far, nearBeacon);
-            oPredict.driver.referenceBody = far.mainBody;
-            oPredict.driver.orbit.referenceBody = far.mainBody;
-            oPredict.driver.pos = far.orbit.pos;
-            oPredict.celestialBody = far.mainBody;
-            oPredictDriver.orbit.UpdateFromStateVectors(far.orbit.pos, exitTraj, far.mainBody, Planetarium.GetUniversalTime());
-
-            oDirection.transform.position = ScaledSpace.LocalToScaledSpace(far.transform.position);
-            if (dirScalar / 325000 > baseWidth) baseWidth = dirScalar / 325000f;
-            oDirection.SetWidth(baseWidth, 0.01f);
-            if (dirScalar / 650000 > baseStart) baseStart = dirScalar / 650000;
-            if (dirScalar / 130000 > baseEnd) baseEnd = dirScalar / 130000;
-//          log.debug("Camera distance is " + dirScalar + " results: " + baseWidth + " " + baseStart + " " + baseEnd);
-            oDirection.SetPosition(0, Vector3d.zero + exitTraj.xzy.normalized * baseStart);
-            oDirection.SetPosition(1, exitTraj.xzy.normalized * baseEnd);
-            oDirection.transform.eulerAngles = Vector3d.zero;
-            */
-        }
-
-        // Back out of orbital predictions.
-        private void hideExitOrbit(OrbitRenderer showOrbit)
-        {
-            // Orbit prediction is broken for now FIXME!!
-
-            /*showOrbit.drawMode = OrbitRenderer.DrawMode.OFF;
-            showOrbit.driver.drawOrbit = false;
-            showOrbit.drawIcons = OrbitRenderer.DrawIcons.NONE;
-
-            oDirection.enabled = false;
-
-            foreach (MapObject mobj in MapView.MapCamera.targets)
-            {
-                if (mobj.vessel == null) continue;
-                if (mobj.vessel.GetInstanceID() == FlightGlobals.ActiveVessel.GetInstanceID())
-                {
-                    MapView.MapCamera.SetTarget(mobj);
-                }
-            }*/
-            if (MapView.MapIsEnabled && !wasInMapView) MapView.ExitMapView();
-        }
-
         // Find parts that need a HCU to transfer.
-        private Dictionary<Part, string> getHCUParts(Vessel craft)
+        public static Dictionary<Part, string> getHCUParts(Vessel craft)
         {
-            HCUCost = 0;
-            Array highEnergyResources = new string[14] { "karborundum", "uranium", "uraninite", "plutonium", "antimatter", "thorium", "nuclear", "exotic", "actinides", "chargedparticles", "fluorine", "lqdhe3", "tritium", "thf4"};
             Dictionary<Part, string> HCUParts = new Dictionary<Part, string>();
-            foreach (Part vpart in vessel.Parts)
+            foreach (Part vpart in craft.Parts)
             {
                 foreach (PartResource vres in vpart.Resources)
                 {
-                    foreach (string checkr in highEnergyResources)
-                    if (vres.resourceName.ToLower().Contains(checkr) && vres.amount > 0)
+                    if (highEnergyResources.ContainsKey(vres.resourceName) && vres.amount > 0)
                     {
-                        if (HCUParts.Keys.Contains<Part>(vpart)) continue;
-                        HCUCost += (vres.info.density * vres.amount * 0.1) / 0.0058;
-                        HCUParts.Add(vpart, vres.resourceName);
+                        if (!HCUParts.Keys.Contains(vpart))
+                            HCUParts.Add(vpart, vres.resourceName);
                     }
                 }
             }
-            HCUCost += craft.GetCrewCount() * 0.9 / 1.13;
-            HCUCost = Math.Round(HCUCost * 100) / 100;
             return HCUParts;
         }
 
@@ -259,7 +90,7 @@ namespace ESLDCore
             string candidateDesc = "";
             foreach (ESLDBeacon selfBeacon in vessel.FindPartModulesImplementing<ESLDBeacon>())
             {
-                if (selfBeacon.beaconModel == "IB1" && selfBeacon.activated)
+                if (selfBeacon.canJumpSelf && selfBeacon.activated)
                 {
                     nearBeaconDistance = 0;
                     nearBeaconRelVel = 0;
@@ -279,7 +110,7 @@ namespace ESLDCore
                 foreach (ESLDBeacon craftbeacon in craft.FindPartModulesImplementing<ESLDBeacon>())
                 {
                     if (!craftbeacon.activated) { continue; }   // Beacon active?
-                    if (craftbeacon.beaconModel == "IB1") { continue; } // Jumpdrives can't do remote transfers.
+                    if (!craftbeacon.jumpTargetable) { continue; } // Jumpdrives can't do remote transfers.
                     string bIdentifier = craftbeacon.beaconModel + " (" + craft.vesselName + ")";
                     nearBeacons.Add(craftbeacon, bIdentifier);
                     int nbIndex = nearBeacons.Count - 1;
@@ -339,7 +170,12 @@ namespace ESLDCore
                         {
                             ESLDBeacon protoBeacon = new ESLDBeacon(pmod.moduleValues, ppart.partInfo.partConfig.GetNodes("MODULE")[ppart.modules.IndexOf(pmod)]);
                             protoBeacon.activated = true;
-                            farTargets.Add(protoBeacon, craft);
+                            // Not sure why, but this check seems to be necessary to avoid ArgumentException: An element with the same key...
+                            // In my mind, the .Clear() above combined with only looping through each part once shouldn't cause that exception.
+                            // Unless maybe if there is more than one ESLDBeacon module on a part?
+                            // Either way, if there are ever bugs reported of far targets not showing up in the list, this may be the culprit.
+                            if (!farTargets.Keys.Contains(protoBeacon))
+                                farTargets.Add(protoBeacon, craft);
                         }
                     }
                 }
@@ -363,18 +199,13 @@ namespace ESLDCore
                 }
                 else
                 {
-                    if (nearBeacon.jumpResources.Count > 0)
-                        primaryResource = nearBeacon.jumpResources.ElementAt(0);
-                    else
-                        primaryResource = null;
                     Events["HailerGUIClose"].active = false;
                     Events["HailerGUIOpen"].active = true;
                 }
             }
-            
         }
 
-        // Screen 1 of beacon interface, displays beacons and where they go along with some fuel calculations. 
+        // Screen 1 of beacon interface, displays beacons and where they go along with some fuel calculations.
         private void BeaconInterface(int GuiId)
         {
             if (!vessel.isActiveVessel) HailerGUIClose();
@@ -439,9 +270,9 @@ namespace ESLDCore
                     if (tripcost == 0) continue;
                     tripcost += tripcost * (driftpenalty * .01);
                     if (nearBeacon.hasAMU) tripcost += nearBeacon.getAMUCost(vessel, ftarg.Value, tonnage);
-                    double adjHCUCost = HCUCost;
-                    if (nearBeacon.beaconModel == "IB1") adjHCUCost = Math.Round((HCUCost - (tripcost * 0.02)) * 100) / 100;
-                    if (nearBeacon.hasHCU) tripcost += adjHCUCost;
+                    double HCUCost = nearBeacon.getHCUCost(vessel, HCUParts.Keys);
+                    if (nearBeacon.builtInHCU) HCUCost = Math.Round((HCUCost - (tripcost * 0.02)) * 100) / 100;
+                    if (nearBeacon.hasHCU) tripcost += HCUCost;
                     tripcost = Math.Round(tripcost * 100) / 100;
                     string targetSOI = ftarg.Value.mainBody.name;
                     double targetAlt = Math.Round(ftarg.Value.altitude / 1000);
@@ -460,7 +291,7 @@ namespace ESLDCore
                     if (affordable) // Show blocked status only for otherwise doable transfers.
                     {
                         fuelstate = buttonHasFuel;
-                        KeyValuePair<string, CelestialBody> checkpath = masterClass.HasTransferPath(nbparent, ftarg.Value, nearBeacon.gLimitEff);
+                        KeyValuePair<string, CelestialBody> checkpath = HasTransferPath(nbparent, ftarg.Value, nearBeacon.gLimitEff);
                         if (checkpath.Key != "OK")
                         {
                             fuelstate = buttonNoPath;
@@ -549,6 +380,7 @@ namespace ESLDCore
                 double tonnage = vessel.GetTotalMass();
                 Vessel nbparent = nearBeacon.vessel;
                 string nbModel = nearBeacon.beaconModel;
+                nearBeacon.checkOwnTechBoxes();
                 double tripcost = nearBeacon.getTripBaseCost(tripdist, tonnage);
                 double driftpenalty = Math.Pow(Math.Floor(nearBeaconDistance / 200), 2) + Math.Floor(Math.Pow(nearBeaconRelVel, 1.5));
                 if (driftpenalty > 0) GUILayout.Label("+" + driftpenalty + "% due to Drift.");
@@ -611,17 +443,17 @@ namespace ESLDCore
                 }
                 if (nearBeacon.hasHCU)
                 {
-                    double adjHCUCost = HCUCost;
-                    if (nearBeacon.beaconModel == "IB1") adjHCUCost = Math.Round((HCUCost - (tripcost * 0.02)) * 100) / 100;
+                    double HCUCost = nearBeacon.getHCUCost(vessel, HCUParts.Keys);
+                    if (nearBeacon.builtInHCU) HCUCost = Math.Round((HCUCost - (tripcost * 0.02)) * 100) / 100;
                     tempLabel = "HCU Shielding adds ";
                     foreach (ESLDJumpResource Jresource in nearBeacon.jumpResources)
                     {
-                        tempLabel += adjHCUCost * Jresource.ratio + " " + Jresource.name;
+                        tempLabel += HCUCost * Jresource.ratio + " " + Jresource.name;
                         if (nearBeacon.jumpResources.IndexOf(Jresource) + 1 < nearBeacon.jumpResources.Count())
                             tempLabel += ", ";
                     }
                     GUILayout.Label(tempLabel + ".");
-                    tripcost += adjHCUCost;
+                    tripcost += HCUCost;
                 }
                 tempLabel = "Total Cost: ";
                 foreach (ESLDJumpResource Jresource in nearBeacon.jumpResources)
@@ -713,7 +545,7 @@ namespace ESLDCore
                     HailerGUIClose();
                     if (oPredict != null) hideExitOrbit(oPredict);
                     // Check transfer path one last time.
-                    KeyValuePair<string, CelestialBody> checkpath = masterClass.HasTransferPath(nbparent, farBeaconVessel, nearBeacon.gLimitEff); // One more check for a clear path in case they left the window open too long.
+                    KeyValuePair<string, CelestialBody> checkpath = HasTransferPath(nbparent, farBeaconVessel, nearBeacon.gLimitEff); // One more check for a clear path in case they left the window open too long.
                     bool finalPathCheck = false;
                     if (checkpath.Key == "OK") finalPathCheck = true;
                     // Check fuel one last time.
@@ -753,10 +585,7 @@ namespace ESLDCore
                             }
                             HCUParts = getHCUParts(vessel);
                             List<Part> HCUList = new List<Part>();
-                            foreach (KeyValuePair<Part, string> HCUPart in HCUParts)
-                            {
-                                HCUList.Add(HCUPart.Key);
-                            }
+                            HCUList.AddRange(HCUParts.Keys);
                             HCUParts.Clear();
                             for (int i = HCUList.Count - 1; i >= 0; i--)
                             {
@@ -772,7 +601,7 @@ namespace ESLDCore
                                 tempPart.Die();
                             }
                         }
-                        masterClass.dazzle();
+                        hailerButton.dazzle();
                         Vector3d transferVelOffset = getJumpVelOffset(vessel, farBeaconVessel, nearBeacon);
                         if (nearBeacon.hasAMU) transferVelOffset = farBeaconVessel.orbit.vel;
                         Vector3d spread = ((UnityEngine.Random.onUnitSphere + UnityEngine.Random.insideUnitSphere) / 2) * (float)precision;
@@ -821,6 +650,8 @@ namespace ESLDCore
 //                        vessel.orbit.UpdateFromUT(Planetarium.GetUniversalTime());
 //                        vessel.orbitDriver.pos = vessel.orbit.pos.xzy;
 //                        vessel.orbitDriver.vel = vessel.orbit.vel;
+                        ScanForNearBeacons();
+                        listFarBeacons();
                     }
                     else if (!fuelcheck && finalPathCheck)
                     {
@@ -929,6 +760,217 @@ namespace ESLDCore
             Fields["hasNearBeacon"].guiActive = false;
             Fields["nearBeaconDistance"].guiActive = false;
             Fields["nearBeaconRelVel"].guiActive = false;
+        }
+
+        // Calculate Jump Velocity Offset
+        public static Vector3d getJumpVelOffset(Vessel near, Vessel far, ESLDBeacon beacon)
+        {
+            Vector3d farRealVelocity = far.orbit.vel;
+            CelestialBody farRefbody = far.mainBody;
+            while (farRefbody.flightGlobalsIndex != 0) // Kerbol
+            {
+                farRealVelocity += farRefbody.orbit.vel;
+                farRefbody = farRefbody.referenceBody;
+            }
+            Vector3d nearRealVelocity = near.orbit.vel;
+            CelestialBody nearRefbody = near.mainBody;
+            if (near.mainBody.flightGlobalsIndex == far.mainBody.flightGlobalsIndex)
+            {
+                farRealVelocity -= far.orbit.vel;
+                //              log.debug("In-system transfer, disregarding far beacon velocity.");
+            }
+            while (nearRefbody.flightGlobalsIndex != 0) // Kerbol
+            {
+                nearRealVelocity += nearRefbody.orbit.vel;
+                nearRefbody = nearRefbody.referenceBody;
+            }
+            return nearRealVelocity - farRealVelocity;
+        }
+
+        // Finds if the path between beacons passes too close to a planet or is within its gravity well.
+        public static KeyValuePair<string, CelestialBody> HasTransferPath(Vessel vOrigin, Vessel vDestination, double gLimit)
+        {
+            // Cribbed with love from RemoteTech.  I have no head for vectors.
+            var returnPair = new KeyValuePair<string, CelestialBody>("start", vOrigin.mainBody);
+            Vector3d opos = vOrigin.GetWorldPos3D();
+            Vector3d dpos = vDestination.GetWorldPos3D();
+            foreach (CelestialBody rock in FlightGlobals.Bodies)
+            {
+                Vector3d bodyFromOrigin = rock.position - opos;
+                Vector3d destFromOrigin = dpos - opos;
+                if (Vector3d.Dot(bodyFromOrigin, destFromOrigin) <= 0) continue;
+                Vector3d destFromOriginNorm = destFromOrigin.normalized;
+                if (Vector3d.Dot(bodyFromOrigin, destFromOriginNorm) >= destFromOrigin.magnitude) continue;
+                Vector3d lateralOffset = bodyFromOrigin - Vector3d.Dot(bodyFromOrigin, destFromOriginNorm) * destFromOriginNorm;
+                double limbo = Math.Sqrt((6.673E-11 * rock.Mass) / gLimit) - rock.Radius; // How low can we go?
+                string limbotype = "Gravity";
+                if (limbo < rock.Radius + rock.Radius * 0.25)
+                {
+                    limbo = rock.Radius + rock.Radius * .025;
+                    limbotype = "Proximity";
+                }
+                if (lateralOffset.magnitude < limbo)
+                {
+                    returnPair = new KeyValuePair<string, CelestialBody>(limbotype, rock);
+                    //log.debug("Lateral Offset was " + lateralOffset.magnitude + "m and needed to be " + limbo + "m, failed due to " + limbotype + " check for " + rock.name + ".");
+                    return returnPair;
+                }
+            }
+            if (FlightGlobals.getGeeForceAtPosition(vDestination.GetWorldPos3D()).magnitude > gLimit) return new KeyValuePair<string, CelestialBody>("Gravity", vDestination.mainBody);
+            returnPair = new KeyValuePair<string, CelestialBody>("OK", null);
+            return returnPair;
+        }
+
+        // Show exit orbital predictions
+        private void showExitOrbit(Vessel near, Vessel far)
+        {
+            // Recenter map, save previous state.
+            wasInMapView = MapView.MapIsEnabled;
+            if (!MapView.MapIsEnabled) MapView.EnterMapView();
+            log.debug("Finding target.");
+            MapObject farTarget = findVesselBody(far);
+            if (farTarget != null) MapView.MapCamera.SetTarget(farTarget);
+            Vector3 mapCamPos = ScaledSpace.ScaledToLocalSpace(MapView.MapCamera.transform.position);
+            Vector3 farTarPos = ScaledSpace.ScaledToLocalSpace(farTarget.transform.position);
+            float dirScalar = Vector3.Distance(mapCamPos, farTarPos);
+            log.debug("Initializing, camera distance is " + dirScalar);
+
+            // Initialize projection stuff.
+            log.debug("Beginning orbital projection.");
+            Vector3d exitTraj = getJumpVelOffset(near, far, nearBeacon);
+            oPredictDriver = new OrbitDriver();
+            oPredictDriver.orbit = new Orbit();
+            oPredictDriver.orbit.referenceBody = far.mainBody;
+            oPredictDriver.referenceBody = far.mainBody;
+            oPredictDriver.upperCamVsSmaRatio = 999999;  // Took forever to figure this out - this sets at what zoom level the orbit appears.  Was causing it not to appear at small bodies.
+            oPredictDriver.lowerCamVsSmaRatio = 0.0001f;
+            oPredictDriver.orbit.UpdateFromStateVectors(far.orbit.pos, exitTraj, far.mainBody, Planetarium.GetUniversalTime());
+            oPredictDriver.orbit.Init();
+            Vector3d p = oPredictDriver.orbit.getRelativePositionAtUT(Planetarium.GetUniversalTime());
+            Vector3d v = oPredictDriver.orbit.getOrbitalVelocityAtUT(Planetarium.GetUniversalTime());
+            oPredictDriver.orbit.h = Vector3d.Cross(p, v);
+            oPredict = MapView.MapCamera.gameObject.AddComponent<OrbitRenderer>();
+            oPredict.upperCamVsSmaRatio = 999999;
+            oPredict.lowerCamVsSmaRatio = 0.0001f;
+            oPredict.celestialBody = far.mainBody;
+            oPredict.driver = oPredictDriver;
+            oPredictDriver.Renderer = oPredict;
+
+            // Splash some color on it.
+            log.debug("Displaying orbital projection.");
+            oPredict.driver.drawOrbit = true;
+            oPredict.driver.orbitColor = Color.red;
+            oPredict.orbitColor = Color.red;
+            oPredict.drawIcons = OrbitRenderer.DrawIcons.OBJ_PE_AP;
+            oPredict.drawMode = OrbitRenderer.DrawMode.REDRAW_AND_RECALCULATE;
+            oPredict.DrawOrbit(OrbitRenderer.DrawMode.REDRAW_AND_RECALCULATE);
+            oPredict.enabled = true;
+
+            // Directional indicator.
+            /*
+            float baseWidth = 20.0f;
+            double baseStart = 10;
+            double baseEnd = 50;
+            oDirObj = new GameObject("Indicator");
+            oDirObj.layer = 10; // Map layer!
+            oDirection = oDirObj.AddComponent<LineRenderer>();
+            oDirection.useWorldSpace = false;
+            oOrigin = null;
+            foreach (Transform sstr in ScaledSpace.Instance.scaledSpaceTransforms)
+            {
+                if (sstr.name == far.mainBody.name)
+                {
+                    oOrigin = sstr;
+                    log.debug("Found origin: " + sstr.name);
+                    break;
+                }
+            }
+            oDirection.transform.parent = oOrigin;
+            oDirection.transform.position = ScaledSpace.LocalToScaledSpace(far.transform.position);
+            oDirection.material = new Material(Shader.Find("Particles/Additive"));
+            oDirection.SetColors(Color.clear, Color.red);
+            if (dirScalar / 325000 > baseWidth) baseWidth = dirScalar / 325000f;
+            oDirection.SetWidth(baseWidth, 0.01f);
+            log.debug("Base Width set to " + baseWidth);
+            oDirection.SetVertexCount(2);
+            if (dirScalar / 650000 > baseStart) baseStart = dirScalar / 650000;
+            if (dirScalar / 130000 > baseEnd) baseEnd = dirScalar / 130000;
+            log.debug("Base Start set to " + baseStart);
+            log.debug("Base End set to " + baseEnd);
+            oDirection.SetPosition(0, Vector3d.zero + exitTraj.xzy.normalized * baseStart);
+            oDirection.SetPosition(1, exitTraj.xzy.normalized * baseEnd);
+            oDirection.enabled = true;
+             */
+        }
+
+
+        // Update said predictions
+        private void updateExitOrbit(Vessel near, Vessel far)
+        {
+            // Orbit prediction is broken for now FIXME!!
+            Vector3 mapCamPos = ScaledSpace.ScaledToLocalSpace(MapView.MapCamera.transform.position);
+            MapObject farTarget = MapView.MapCamera.target;
+            Vector3 farTarPos = ScaledSpace.ScaledToLocalSpace(farTarget.transform.position);
+            float dirScalar = Vector3.Distance(mapCamPos, farTarPos);
+            Vector3d exitTraj = getJumpVelOffset(near, far, nearBeacon);
+            oPredict.driver.referenceBody = far.mainBody;
+            oPredict.driver.orbit.referenceBody = far.mainBody;
+            oPredict.driver.pos = far.orbit.pos;
+            oPredict.celestialBody = far.mainBody;
+            oPredictDriver.orbit.UpdateFromStateVectors(far.orbit.pos, exitTraj, far.mainBody, Planetarium.GetUniversalTime());
+
+            /* Direction indicator is broken/not required
+            float baseWidth = 20.0f;
+            double baseStart = 10;
+            double baseEnd = 50;
+            oDirection.transform.position = ScaledSpace.LocalToScaledSpace(far.transform.position);
+            if (dirScalar / 325000 > baseWidth) baseWidth = dirScalar / 325000f;
+            oDirection.SetWidth(baseWidth, 0.01f);
+            if (dirScalar / 650000 > baseStart) baseStart = dirScalar / 650000;
+            if (dirScalar / 130000 > baseEnd) baseEnd = dirScalar / 130000;
+//          log.debug("Camera distance is " + dirScalar + " results: " + baseWidth + " " + baseStart + " " + baseEnd);
+            oDirection.SetPosition(0, Vector3d.zero + exitTraj.xzy.normalized * baseStart);
+            oDirection.SetPosition(1, exitTraj.xzy.normalized * baseEnd);
+            oDirection.transform.eulerAngles = Vector3d.zero;*/
+        }
+
+        // Back out of orbital predictions.
+        private void hideExitOrbit(OrbitRenderer showOrbit)
+        {
+            // Orbit prediction is broken for now FIXME!!
+            showOrbit.drawMode = OrbitRenderer.DrawMode.OFF;
+            showOrbit.driver.drawOrbit = false;
+            showOrbit.drawIcons = OrbitRenderer.DrawIcons.NONE;
+
+            //Direction indicator is broken/not required
+            //oDirection.enabled = false;
+
+            /*Deprecated foreach (MapObject mobj in MapView.MapCamera.targets)
+            {
+                if (mobj.vessel == null) continue;
+                if (mobj.vessel.GetInstanceID() == FlightGlobals.ActiveVessel.GetInstanceID())
+                {
+                    MapView.MapCamera.SetTarget(mobj);
+                }
+            }*/
+            MapView.MapCamera.SetTarget(MapView.MapCamera.targets.Find((MapObject mobj) => mobj.vessel!=null && mobj.vessel.GetInstanceID() == FlightGlobals.ActiveVessel.GetInstanceID()));
+            if (MapView.MapIsEnabled && !wasInMapView) MapView.ExitMapView();
+        }
+
+        // Mapview Utility
+        private MapObject findVesselBody(Vessel craft)
+        {
+            int cInst = craft.mainBody.GetInstanceID();
+            //          foreach (MapObject mobj in MapView.FindObjectsOfType<MapObject>())
+            foreach (MapObject mobj in MapView.MapCamera.targets)
+            {
+                if (mobj.celestialBody == null) continue;
+                if (mobj.celestialBody.GetInstanceID() == cInst)
+                {
+                    return mobj;
+                }
+            }
+            return null;
         }
     }
 }

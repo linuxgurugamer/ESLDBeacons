@@ -66,12 +66,28 @@ namespace ESLDCore
 
         // Cost parameter (from part config). Distance beyond which cost becomes prohibitive. (Zero for infinite)
         [KSPField]
-        public int distpenalty = 0;
+        public int distPenalty = 0;
+
+        // Cost parameter (from part config). Cost added simply for using the beacon.
+        [KSPField]
+        public float baseCost = 0;
 
         [KSPField]
         public float jumpPrecision = 10;
 
-        // Self-reported binary techbox capability.  
+        [KSPField]
+        public bool canJumpSelf = false;
+
+        [KSPField]
+        public bool builtInHCU = false;
+
+        [KSPField]
+        public bool jumpTargetable = true;
+
+        [KSPField]
+        public bool needsResourcesToBoot = false;
+
+        // Self-reported binary techbox capability.
         [KSPField(isPersistant = true)]
         public int techBoxInventory = 0;
 
@@ -95,7 +111,7 @@ namespace ESLDCore
         public bool hasSCU = false;
         public double massBonus = 1;
 
-        private const string RnodeName = "RESOURCE";
+        public const string RnodeName = "RESOURCE";
         Logger log = new Logger("ESLDCore:ESLDBeacons: ");
 
         public ESLDBeacon() { }
@@ -118,7 +134,10 @@ namespace ESLDCore
             if (bool.TryParse(node.GetValue("activated"), out tempbool))
                 activated = tempbool;
             if (float.TryParse(node.GetValue("gLimit"), out tempfloat))
+            {
                 gLimit = tempfloat;
+                gLimitEff = gLimit;
+            }
             if (float.TryParse(node.GetValue("gLimitEff"), out tempfloat))
                 gLimitEff = tempfloat;
             if (float.TryParse(node.GetValue("coef"), out tempfloat))
@@ -131,29 +150,29 @@ namespace ESLDCore
                 distPow = tempint;
             if (float.TryParse(node.GetValue("baseMult"), out tempfloat))
                 baseMult = tempfloat;
-            if (int.TryParse(node.GetValue("distpenalty"), out tempint))
-                distpenalty = tempint;
+            if (int.TryParse(node.GetValue("distPenalty"), out tempint))
+                distPenalty = tempint;
+            if (float.TryParse(node.GetValue("baseCost"), out tempfloat))
+                baseCost = tempfloat;
             if (float.TryParse(node.GetValue("jumpPrecision"), out tempfloat))
                 jumpPrecision = tempfloat;
             if (int.TryParse(node.GetValue("techBoxInventory"), out tempint))
                 techBoxInventory = tempint;
+            buildTBInventory();
+            if (bool.TryParse(node.GetValue("canJumpSelf"), out tempbool))
+                canJumpSelf = tempbool;
+            if (bool.TryParse(node.GetValue("builtInHCU"), out tempbool))
+                builtInHCU = tempbool;
+            if (bool.TryParse(node.GetValue("jumpTargetable"), out tempbool))
+                jumpTargetable = tempbool;
+            if (bool.TryParse(node.GetValue("needsResourcesToBoot"), out tempbool))
+                needsResourcesToBoot = tempbool;
             if (node.GetNodes(RnodeName).Count() > 0)
             {
                 jumpResources.Clear();
                 foreach (ConfigNode Rnode in node.GetNodes(RnodeName))
                 {
-                    string Rname = Rnode.GetValue("name");
-                    float Rratio = 1;
-                    double RfuelOnBoard = 0;
-                    bool fuelCheck = true;
-                    if (!float.TryParse(Rnode.GetValue("ratio"), out Rratio))
-                        Rratio = 1; // Rratio is already 1. Replace this with a log entry. FIXME!!
-                    if (!double.TryParse(Rnode.GetValue("fuelOnBoard"), out RfuelOnBoard))
-                    {
-                        RfuelOnBoard = 0;
-                        fuelCheck = false;
-                    }
-                    jumpResources.Add(new ESLDJumpResource(Rname, Rratio, RfuelOnBoard, fuelCheck));
+                    jumpResources.Add(new ESLDJumpResource(Rnode));
                 }
             }
         }
@@ -163,18 +182,6 @@ namespace ESLDCore
             opFloor = findAcceptableAltitude(vessel.mainBody); // Keep updating tooltip display.
             if (FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude <= gLimitEff) Fields["neededEC"].guiActive = !activated;
             Fields["constantEC"].guiActive = activated;
-            /*ModuleAnimateGeneric MAG = part.FindModuleImplementing<ModuleAnimateGeneric>();
-            if (MAG != null) {
-                MAG.Events["Toggle"].guiActive = false;
-                if (activated && MAG.Progress == 0 && !MAG.IsMoving())
-                {
-                    MAG.Toggle();
-                }
-                else if (!activated && MAG.Progress == 1 && !MAG.IsMoving())
-                {
-                    MAG.Toggle();
-                }
-            }*/
             foreach (ESLDJumpResource Jresource in jumpResources)
                 Jresource.getFuelOnBoard(vessel);
         }
@@ -200,65 +207,47 @@ namespace ESLDCore
                 ScreenMessages.PostScreenMessage("Warning: Electric Charge depleted.  Beacon has been shut down.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
                 BeaconShutdown();
             }
-//          part.AddThermalFlux(TimeWarp.deltaTime * constantEC * 10);  // Not feasible until the fluctuation with high warp is nailed down.
-
-            /*if (!requireResource(vessel, "Karborundum", 0.1, false))
+            if (needsResourcesToBoot)
             {
-                ScreenMessages.PostScreenMessage("Warning: Karborundum depleted.  Beacon has been shut down.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
-                BeaconShutdown();
-            }*/
+                foreach (ESLDJumpResource Jresource in jumpResources)
+                {
+                    if (Jresource.neededToBoot && !requireResource(vessel, Jresource.name, double.Epsilon, false))
+                    {
+                        ScreenMessages.PostScreenMessage("Warning: " + Jresource.name + " depleted.  Beacon has been shut down.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
+                        BeaconShutdown();
+                        break;
+                    }
+                }
+            }
+            //part.AddThermalFlux(TimeWarp.deltaTime * constantEC * 10);  // Not feasible until the fluctuation with high warp is nailed down.
         }
 
         // Calculate base cost in units of Karborundum before penalties for a transfer.
         public double getTripBaseCost(double tripdist, double tonnage)
         {
             double yardstick = Math.Pow(13599840256, 1 / (distPow + 1)); //Math.Sqrt(Math.Sqrt(13599840256));
+            float distPenaltyCost = 0;
             switch (beaconModel)
             {
-                case "LB10":
-                    massFctr = 0.001f;
-                    coef = 0.01057371f;
-                    distPow = 1;
-                    massExp = 1f;
-                    baseMult = 0f;
-                    distpenalty = 0;
-                    if (tripdist > 1000000000) distpenalty = 2;
-                    return ((Math.Pow(tonnage, 1 + (.001 * tonnage) + distpenalty) / 10) * ((Math.Sqrt(Math.Sqrt(tripdist * (tripdist / 5E6)))) / yardstick) / tonnage * 10000) * tonnage / 2000;
-                case "LB15":
-                    massFctr = 0.0002f;
-                    coef = 0.001057371f;
-                    distPow = 1;
-                    massExp = 2f;
-                    baseMult = 0.35f;
-                    distpenalty = 0;
-                    return (700 + (Math.Pow(tonnage, 1 + (.0002 * Math.Pow(tonnage, 2))) / 10) * ((Math.Sqrt(Math.Sqrt(tripdist * (tripdist / 5E10)))) / yardstick) / tonnage * 10000) * tonnage / 2000;
-                case "LB100":
-                    massFctr = 0.00025f;
-                    coef = 0.88650770f;
-                    distPow = 3;
-                    massExp = 1f;
-                    baseMult = 0.25f;
-                    distpenalty = 0;
-                    return (500 + (Math.Pow(tonnage, 1 + (.00025 * tonnage)) / 20) * ((Math.Sqrt(Math.Sqrt(Math.Sqrt(tripdist * 25000)))) / Math.Sqrt(yardstick)) / tonnage * 10000) * tonnage / 2000;
                 case "IB1":
                     massFctr = 1 / 6000;
                     coef = Convert.ToSingle(0.9 * Math.Pow((1 + tripdist * 2E11), 1 / 4));
                     distPow = 1;
                     massExp = 1f;
                     baseMult = 0f;
-                    distpenalty = 0;
+                    distPenalty = 0;
                     return ((((Math.Pow(tonnage, 1 + (tonnage / 6000)) * 0.9) / 10) * ((Math.Sqrt(Math.Sqrt(tripdist + 2E11))) / yardstick) / tonnage * 10000) * tonnage / 2000);
                 default:
-                    if ((distpenalty > 0) && (tripdist > distpenalty))
+                    if ((distPenalty > 0) && (tripdist > distPenalty))
                     {
-                        distpenalty = 2;
+                        distPenaltyCost = 2;
                     }
                     else
                     {
-                        distpenalty = 0;
+                        distPenaltyCost = 0;
                     }
                     yardstick = Math.Pow(13599840256, 1 / Math.Pow(2, distPow + 1)); //Math.Sqrt(Math.Sqrt(13599840256));
-                    return tonnage * baseMult + Math.Pow(tonnage, 1 + massFctr * Math.Pow(tonnage, massExp) + distpenalty) * Math.Pow(tripdist, 1 / Math.Pow(2, distPow)) * coef / yardstick;
+                    return tonnage * baseMult + Math.Pow(tonnage, 1 + massFctr * Math.Pow(tonnage, massExp) + distPenaltyCost) * Math.Pow(tripdist, 1 / Math.Pow(2, distPow)) * coef / yardstick + baseCost;
             }
         }
 
@@ -270,24 +259,33 @@ namespace ESLDCore
             return Math.Round(((comp * tton) / Math.Pow(Math.Log10(comp * tton), 2)) / 2) / 100;
         }
 
+        public double getHCUCost(Vessel craft, List<Part> HCUParts = null)
+        {
+            double HCUCost = 0;
+            if (HCUParts == null)
+                HCUParts = ESLDHailer.getHCUParts(craft).Keys.ToList();
+            foreach (Part vpart in HCUParts)
+            {
+                foreach (PartResource vres in vpart.Resources)
+                {
+                    if (ESLDHailer.highEnergyResources.ContainsKey(vres.resourceName) && vres.amount > 0)
+                    {
+                        HCUCost += (vres.info.density * vres.amount * 0.1) / 0.0058 * ESLDHailer.highEnergyResources[vres.resourceName];
+                    }
+                }
+            }
+            HCUCost += craft.GetCrewCount() * 0.9 / 1.13;
+            HCUCost = Math.Round(HCUCost * 100) / 100;
+            return HCUCost;
+        }
+        public double getHCUCost(Vessel craft, Dictionary<Part, string>.KeyCollection HCUParts = null)
+        {
+            return getHCUCost(craft, HCUParts.ToList());
+        }
+
         // Calculate how far away from a beacon the ship will arrive.
         public double getTripSpread(double tripdist)
         {
-            switch (beaconModel)
-            {
-                case "LB10":
-                    jumpPrecision = 7;
-                    break;
-                case "LB15":
-                    jumpPrecision = 15;
-                    break;
-                case "LB100":
-                    jumpPrecision = 80;
-                    break;
-                case "IB1":
-                    jumpPrecision = 1.3f;
-                    break;
-            }
             return Math.Round(Math.Log(tripdist) / Math.Log(jumpPrecision) * 10) * 100;
         }
 
@@ -313,24 +311,7 @@ namespace ESLDCore
         // Given a target body, get minimum ASL where beacon can function in km.
         public double findAcceptableAltitude(CelestialBody targetbody)
         {
-            switch (beaconModel)
-            {
-                case "LB10":
-                    gLimitEff = 1.0f;
-                    break;
-                case "LB15":
-                    gLimitEff = 0.5f;
-                    break;
-                case "LB100":
-                    gLimitEff = 0.1f;
-                    break;
-                case "IB1":
-                    gLimitEff = 0.1f;
-                    break;
-                default:
-                    gLimitEff = gLimit;
-                    break;
-            }
+            gLimitEff = gLimit;
             double neededMult = 10;
             double constantDiv = 50;
             double baseLimit = gLimitEff;
@@ -351,7 +332,7 @@ namespace ESLDCore
             if (limbo < targetbody.Radius * 0.25) limbo = targetbody.Radius * 0.25;
             double fuelECMult = 0;
             foreach (ESLDJumpResource Jresource in jumpResources)
-                fuelECMult += Jresource.fuelOnBoard * Jresource.ECMult;
+                fuelECMult += Math.Max(Jresource.fuelOnBoard * Jresource.ECMult, Jresource.minEC);
             neededEC = Math.Round((fuelECMult * neededMult * (FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude / baseLimit)) * getCrewBonuses(vessel, "Engineer", 0.5, 5));
             constantEC = Math.Round(fuelECMult / constantDiv * (FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude / baseLimit) * 100 * getCrewBonuses(vessel, "Engineer", 0.5, 5)) / 100;
             return Math.Round(limbo / 1000);
@@ -364,16 +345,16 @@ namespace ESLDCore
             hasGMU = false;
             hasSCU = false;
             techBoxInventory = 0;
-            if (beaconModel == "IB1")
+            if (builtInHCU)
             {
                 hasHCU = true;
                 techBoxInventory += 2;
             }
             foreach (ESLDTechbox techbox in vessel.FindPartModulesImplementing<ESLDTechbox>())
             {
-                if (techbox.activated)
+                if (techbox.activated || techbox.alwaysActive)
                 {
-                    switch(techbox.techBoxModel)
+                    switch (techbox.techBoxModel.ToUpper())
                     {
                         case "AMU":
                             if (!hasAMU) techBoxInventory += 1;
@@ -394,6 +375,14 @@ namespace ESLDCore
                     }
                 }
             }
+        }
+
+        protected void buildTBInventory()
+        {
+            hasSCU = (techBoxInventory) >= 8;
+            hasGMU = (techBoxInventory % 8) >= 4;
+            hasHCU = (techBoxInventory % 4) >= 2;
+            hasAMU = (techBoxInventory % 2) >= 1;
         }
 
         // Simple bool for resource checking and usage.  Returns true and optionally uses resource if resAmount of res is available.
@@ -436,101 +425,124 @@ namespace ESLDCore
         public void BeaconInitialize()
         {
             checkOwnTechBoxes();
-            log.info("Crew bonus: Engineers on board reduce electrical usage by: " + (1 - getCrewBonuses(vessel, "Engineer", 0.5, 5)) * 100 + "%");
-            log.info("Crew bonus: Scientists on board reduce jump costs by: " + (1 - getCrewBonuses(vessel, "Scientist", 0.5, 5)) * 100 + "%");
-            log.info("Crew bonus: Pilots on board reduce drift by: " + (1 - getCrewBonuses(vessel, "Pilot", 0.5, 5)) * 100 + "%");
-            foreach(ESLDJumpResource Jresource in jumpResources)
+            if (!activated)
             {
-                if (!requireResource(vessel, Jresource.name, double.Epsilon, false))
+                checkOwnTechBoxes();
+                log.info("Crew bonus: Engineers on board reduce electrical usage by: " + (1 - getCrewBonuses(vessel, "Engineer", 0.5, 5)) * 100 + "%");
+                log.info("Crew bonus: Scientists on board reduce jump costs by: " + (1 - getCrewBonuses(vessel, "Scientist", 0.5, 5)) * 100 + "%");
+                log.info("Crew bonus: Pilots on board reduce drift by: " + (1 - getCrewBonuses(vessel, "Pilot", 0.5, 5)) * 100 + "%");
+                if (needsResourcesToBoot)
                 {
-                    ScreenMessages.PostScreenMessage("Cannot activate!  Insufficient " + Jresource.name + " to initiate reaction.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
+                    foreach (ESLDJumpResource Jresource in jumpResources)
+                    {
+                        if (Jresource.neededToBoot && !requireResource(vessel, Jresource.name, double.Epsilon, false))
+                        {
+                            ScreenMessages.PostScreenMessage("Cannot activate!  Insufficient " + Jresource.name + " to initiate reaction.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
+                            return;
+                        }
+                    }
+                }
+                if (FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude > gLimitEff) // Check our G forces.
+                {
+                    log.warning("Too deep in gravity well to activate!");
+                    string thevar = (vessel.mainBody.name == "Mun" || vessel.mainBody.name == "Sun") ? "the " : string.Empty;
+                    ScreenMessages.PostScreenMessage("Cannot activate!  Gravity from " + thevar + vessel.mainBody.name + " is too strong.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
                     return;
                 }
+                if (vessel.altitude < (vessel.mainBody.Radius * .25f)) // Check for radius limit.
+                {
+                    string thevar = (vessel.mainBody.name == "Mun" || vessel.mainBody.name == "Sun") ? "the " : string.Empty;
+                    ScreenMessages.PostScreenMessage("Cannot activate!  Beacon is too close to " + thevar + vessel.mainBody.name + ".", 5.0f, ScreenMessageStyle.UPPER_CENTER);
+                    return;
+                }
+                if (!requireResource(vessel, "ElectricCharge", neededEC, true))
+                {
+                    ScreenMessages.PostScreenMessage("Cannot activate!  Insufficient electric power to initiate reaction.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
+                    return;
+                }
+                //          part.AddThermalFlux(neededEC * 10);
+                activated = true;
+                part.force_activate();
+                Fields["neededEC"].guiActive = false;
+                Fields["constantEC"].guiActive = true;
+                Events["BeaconInitialize"].active = false;
+                Events["BeaconShutdown"].active = true;
+                Actions["BeaconInitializeAction"].active = false;
+                Actions["BeaconShutdownAction"].active = true;
+                beaconStatus = "Active";
+                log.info("EC Activation charge at " + neededEC + "(" + FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude + "/" + gLimitEff + ")");
+                if (anim != null)
+                {
+                    anim[animationName].normalizedSpeed = 1f;
+                    anim.Play(animationName);
+                }
             }
-            if (FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude > gLimitEff) // Check our G forces.
-            {
-                log.warning("Too deep in gravity well to activate!");
-                string thevar = (vessel.mainBody.name == "Mun" || vessel.mainBody.name == "Sun") ? "the " : string.Empty;
-                ScreenMessages.PostScreenMessage("Cannot activate!  Gravity from " + thevar + vessel.mainBody.name + " is too strong.",5.0f,ScreenMessageStyle.UPPER_CENTER);
-                return;
-            }
-            if (vessel.altitude < (vessel.mainBody.Radius * .25f)) // Check for radius limit.
-            {
-                string thevar = (vessel.mainBody.name == "Mun" || vessel.mainBody.name == "Sun") ? "the " : string.Empty;
-                ScreenMessages.PostScreenMessage("Cannot activate!  Beacon is too close to " + thevar + vessel.mainBody.name + ".", 5.0f, ScreenMessageStyle.UPPER_CENTER);
-                return;
-            }
-            if (!requireResource(vessel, "ElectricCharge", neededEC, true))
-            {
-                ScreenMessages.PostScreenMessage("Cannot activate!  Insufficient electric power to initiate reaction.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
-                return;
-            }
-//          part.AddThermalFlux(neededEC * 10);
-            activated = true;
-            part.force_activate();
-            Fields["neededEC"].guiActive = false;
-            Fields["constantEC"].guiActive = true;
-            Events["BeaconInitialize"].active = false;
-            Events["BeaconShutdown"].active = true;
-            beaconStatus = "Active";
-            log.info("EC Activation charge at " + neededEC + "(" + FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude + "/" + gLimitEff + ")");
-            if(anim!=null)
-            {
-                anim[animationName].normalizedSpeed = 1f;
-                anim.Play(animationName);
-            }
-            /*ModuleAnimateGeneric MAG = part.FindModuleImplementing<ModuleAnimateGeneric>();
-            log.debug("Activating beacon!  Toggling MAG from " + MAG.status + "-" + MAG.Progress);
-            if (MAG != null)
-                MAG.Toggle();*/
+            else
+                log.warning("Can only initialize when shut down!");
         }
 
         [KSPEvent(name = "BeaconShutdown", active = false, guiActive = true, guiName = "Shutdown")]
         public void BeaconShutdown()
         {
-            beaconStatus = "Offline";
-            activated = false;
-            Fields["constantEC"].guiActive = false;
-            Events["BeaconShutdown"].active = false;
-            Events["BeaconInitialize"].active = true;
-            if (anim != null)
+            if (activated)
             {
-                anim[animationName].normalizedSpeed = -1f;
-                anim.Play(animationName);
+                beaconStatus = "Offline";
+                activated = false;
+                Fields["constantEC"].guiActive = false;
+                Events["BeaconShutdown"].active = false;
+                Events["BeaconInitialize"].active = true;
+                Actions["BeaconInitializeAction"].active = true;
+                Actions["BeaconShutdownAction"].active = false;
+                if (anim != null)
+                {
+                    anim[animationName].normalizedSpeed = -1f;
+                    anim.Play(animationName);
+                }
             }
-            /*ModuleAnimateGeneric MAG = part.FindModuleImplementing<ModuleAnimateGeneric>();
-            log.debug("Deactivating beacon!  Toggling MAG from " + MAG.status + "-" + MAG.Progress);
-            if (MAG != null)
-                MAG.Toggle();*/
+            else
+                log.warning("Can only shut down when activated!");
         }
 
-        public override void OnSave(ConfigNode node)
+        [KSPAction("Toggle Beacon")]
+        public void toggleBeaconAction()
+        {
+            if (activated)
+                BeaconShutdown();
+            else
+                BeaconInitialize();
+        }
+        [KSPAction("Initialize Beacon")]
+        public void BeaconInitializeAction()
+        {
+            if (!activated)
+                BeaconInitialize();
+            else
+                log.warning("Can only initialize when shut down!");
+        }
+        [KSPAction("Shutdown Beacon")]
+        public void BeaconShutdownAction()
+        {
+            if (activated)
+                BeaconShutdown();
+            else
+                log.warning("Can only shut down when activated!");
+        }
+
+        /*public override void OnSave(ConfigNode node)
         {
             base.OnSave(node);
             foreach (ESLDJumpResource Jresource in jumpResources)
             {
-                ConfigNode Rnode = new ConfigNode(RnodeName);
-                Rnode.AddValue("name", Jresource.name);
-                Rnode.AddValue("ratio", Jresource.ratio);
-                Rnode.AddValue("fuelOnBoard", Jresource.fuelOnBoard);
-                node.AddNode(Rnode);
+                node.AddNode(Jresource.OnSave());
             }
-        }
+        }*/
 
         public override void OnLoad(ConfigNode node)
         {
             base.OnLoad(node);
             foreach (ConfigNode Rnode in node.GetNodes(RnodeName))
             {
-                string Rname = Rnode.GetValue("name");
-                float Rratio = 1;
-                double RfuelOnBoard = 0;
-                if (float.TryParse(Rnode.GetValue("ratio"), out Rratio))
-                    Rratio = 1; // Rratio is already 1. Replace this with a log entry. FIXME!!
-                bool fuelCheck = double.TryParse(Rnode.GetValue("fuelOnBoard"), out RfuelOnBoard);
-                ESLDJumpResource Jresource = new ESLDJumpResource(Rname, Rratio, RfuelOnBoard);
-                Jresource.fuelCheck = fuelCheck;
-                jumpResources.Add(Jresource);
+                jumpResources.Add(new ESLDJumpResource(Rnode));
             }
             // Not sure if there should be a default resource...
             if (jumpResources.Count == 0 && (beaconModel == "LB10" || beaconModel == "LB15" || beaconModel == "LB100" || beaconModel == "IB1"))
@@ -556,6 +568,7 @@ namespace ESLDCore
 
         public override void OnStart(StartState state)
         {
+            checkOwnTechBoxes();
             if (animationName != "")
             {
                 anim = part.FindModelAnimators(animationName).FirstOrDefault();
@@ -579,6 +592,43 @@ namespace ESLDCore
                 }
             }
         }
+
+        public override string GetInfo()
+        {
+            StringBuilder info = new StringBuilder();
+
+            info.AppendLine("Beacon Model: " + beaconModel);
+            switch (beaconModel)
+            {
+                case ("LB10"):
+                    info.AppendLine("Best for distances below 1Gm.");
+                    break;
+                case ("LB15"):
+                    info.AppendLine("Best for masses below 60T and distances between 100Mm and 100Gm.");
+                    break;
+                case ("LB100"):
+                    info.AppendLine("Best for distances above 1Gm.");
+                    break;
+            }
+            info.AppendLine("Gravity limit: " + gLimit + "g");
+
+            if (builtInHCU || canJumpSelf || (!jumpTargetable) || (distPenalty > 0))
+                info.AppendLine();
+            if (builtInHCU)
+                info.AppendLine("<b><color=#99ff00ff>Contains a built-in HCU</color></b>");
+            if (canJumpSelf)
+                info.AppendLine("<color=#99ff00ff>Can self-transfer.</color>");
+            if (!jumpTargetable)
+                info.AppendLine("<b><color=#FDA401>Cannot be a target beacon</color></b>");
+            if (distPenalty > 0)
+                info.AppendFormat("<color=#FDA401>Cost prohibitive beyond {0} km</color>", distPenalty / 1000).AppendLine();
+
+            if (jumpResources.Count() > 0)
+                info.AppendLine().AppendLine("<b><color=#99ff00ff>Requires:</color></b>");
+            foreach (ESLDJumpResource Jresource in jumpResources)
+                info.AppendFormat("<b>{0}:</b> Ratio: {1}", Jresource.name, Jresource.ratio.ToString("F2")).AppendLine();
+            return info.ToString().TrimEnd(Environment.NewLine.ToCharArray());
+        }
     }
 
     public class ESLDJumpResource
@@ -587,9 +637,16 @@ namespace ESLDCore
         public float ratio = 1;
         public double fuelOnBoard = 0;
         public float ECMult = 1;
+        public float minEC = 0;
         public bool fuelCheck = false;
-        
-        public ESLDJumpResource(string name, float ratio=1, double fuelOnBoard = 0, bool fuelCheck = false)
+        public bool neededToBoot = true;
+
+        public static Dictionary<string, float> HEResources = new Dictionary<string, float>()
+        {
+            {"Karborundum", 1}
+        };
+
+        public ESLDJumpResource(string name, float ratio=1, double fuelOnBoard = 0, bool fuelCheck = false, float ECMult = 1, float minEC = 0, bool neededToBoot = true)
         {
             this.name = name;
             this.ratio = ratio;
@@ -598,17 +655,49 @@ namespace ESLDCore
                 this.fuelCheck = true;
             else
                 this.fuelCheck = fuelCheck;
-            switch (this.name)
-            {
-                case "Karborundum":
-                    this.ECMult = 1;
-                    break;
-                default:
-                    this.ECMult = 1;
-                    break;
-            }
+            if (ECMult == 1 && HEResources.ContainsKey(this.name))
+                this.ECMult = HEResources[this.name];
         }
-        
+        public ESLDJumpResource(ConfigNode node)
+        {
+            float tempfloat;
+            double tempdouble;
+            bool tempbool;
+            this.name = node.GetValue("name");
+            if (float.TryParse(node.GetValue("ratio"), out tempfloat))
+                this.ratio = tempfloat;
+            if (double.TryParse(node.GetValue("fuelOnBoard"), out tempdouble))
+            {
+                this.fuelOnBoard = tempdouble;
+                this.fuelCheck = true;
+            }
+            else
+            {
+                this.fuelOnBoard = 0;
+                this.fuelCheck = false;
+            }
+            if (float.TryParse(node.GetValue("ECMult"), out tempfloat))
+                this.ECMult = tempfloat;
+            else if (HEResources.ContainsKey(this.name))
+                this.ECMult = HEResources[this.name];
+            if (float.TryParse(node.GetValue("minEC"), out tempfloat))
+                this.minEC = tempfloat;
+            if (bool.TryParse(node.GetValue("neededToBoot"), out tempbool))
+                this.neededToBoot = tempbool;
+        }
+
+        public ConfigNode OnSave()
+        {
+            ConfigNode node = new ConfigNode(ESLDBeacon.RnodeName);
+            node.AddValue("name", name);
+            node.AddValue("ratio", ratio);
+            node.AddValue("fuelOnBoard", fuelOnBoard);
+            if (ECMult != 1)    { node.AddValue("ECMult", 1); }
+            if (minEC!=0)       { node.AddValue("minEC", minEC); }
+            if (!neededToBoot)  { node.AddValue("neededToBoot", neededToBoot); }
+            return node;
+        }
+
         public double getFuelOnBoard(Vessel vessel)
         {
             fuelOnBoard = 0;
