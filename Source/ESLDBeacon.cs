@@ -186,10 +186,8 @@ namespace ESLDCore
                 Jresource.getFuelOnBoard(vessel);
         }
 
-
         public override void OnFixedUpdate()
         {
-            checkOwnTechBoxes();
             if (FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude > gLimitEff)
             {
                 ScreenMessages.PostScreenMessage("Warning: Too deep in gravity well.  Beacon has been shut down for safety.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
@@ -350,6 +348,8 @@ namespace ESLDCore
                 hasHCU = true;
                 techBoxInventory += 2;
             }
+            if (vessel == null)
+                return;
             foreach (ESLDTechbox techbox in vessel.FindPartModulesImplementing<ESLDTechbox>())
             {
                 if (techbox.activated || techbox.alwaysActive)
@@ -424,7 +424,6 @@ namespace ESLDCore
         [KSPEvent(name="BeaconInitialize", active = true, guiActive = true, guiName = "Initialize Beacon")]
         public void BeaconInitialize()
         {
-            checkOwnTechBoxes();
             if (!activated)
             {
                 checkOwnTechBoxes();
@@ -504,7 +503,7 @@ namespace ESLDCore
         }
 
         [KSPAction("Toggle Beacon")]
-        public void toggleBeaconAction()
+        public void toggleBeaconAction(KSPActionParam param)
         {
             if (activated)
                 BeaconShutdown();
@@ -512,7 +511,7 @@ namespace ESLDCore
                 BeaconInitialize();
         }
         [KSPAction("Initialize Beacon")]
-        public void BeaconInitializeAction()
+        public void BeaconInitializeAction(KSPActionParam param)
         {
             if (!activated)
                 BeaconInitialize();
@@ -520,7 +519,7 @@ namespace ESLDCore
                 log.warning("Can only initialize when shut down!");
         }
         [KSPAction("Shutdown Beacon")]
-        public void BeaconShutdownAction()
+        public void BeaconShutdownAction(KSPActionParam param)
         {
             if (activated)
                 BeaconShutdown();
@@ -540,6 +539,7 @@ namespace ESLDCore
         public override void OnLoad(ConfigNode node)
         {
             base.OnLoad(node);
+            checkOwnTechBoxes();
             foreach (ConfigNode Rnode in node.GetNodes(RnodeName))
             {
                 jumpResources.Add(new ESLDJumpResource(Rnode));
@@ -566,9 +566,18 @@ namespace ESLDCore
             }
         }
 
-        public override void OnStart(StartState state)
+        public override void OnSave(ConfigNode node)
         {
             checkOwnTechBoxes();
+            if (node.HasValue("techBoxInventory"))
+                node.SetValue("techBoxInventory", techBoxInventory.ToString());
+            foreach (ESLDJumpResource Jresource in jumpResources)
+                node.AddNode(Jresource.OnSave());
+            base.OnSave(node);
+        }
+
+        public override void OnStart(StartState state)
+        {
             if (animationName != "")
             {
                 anim = part.FindModelAnimators(animationName).FirstOrDefault();
@@ -590,6 +599,11 @@ namespace ESLDCore
                         anim.Play(animationName);
                     }
                 }
+            }
+            if (HighLogic.LoadedSceneIsFlight)
+            {
+                checkOwnTechBoxes();
+                opFloor = findAcceptableAltitude(vessel.mainBody); // Update tooltip display.
             }
         }
 
