@@ -605,6 +605,9 @@ namespace ESLDCore
                         Vector3d transferVelOffset = getJumpVelOffset(vessel, farBeaconVessel, nearBeacon);
                         if (nearBeacon.hasAMU) transferVelOffset = farBeaconVessel.orbit.vel;
                         Vector3d spread = ((UnityEngine.Random.onUnitSphere + UnityEngine.Random.insideUnitSphere) / 2) * (float)precision;
+                        // Making the spread less likely to throw you outside the SoI of the body.
+                        if ((farBeaconVessel.orbit.pos + spread).magnitude > farBeaconVessel.mainBody.sphereOfInfluence)
+                            spread = -spread;   // Negative random is equally random.
 
                         OrbitDriver vesOrb = vessel.orbitDriver;
                         Orbit orbit = vesOrb.orbit;
@@ -650,7 +653,7 @@ namespace ESLDCore
 //                        vessel.orbit.UpdateFromUT(Planetarium.GetUniversalTime());
 //                        vessel.orbitDriver.pos = vessel.orbit.pos.xzy;
 //                        vessel.orbitDriver.vel = vessel.orbit.vel;
-                        ScanForNearBeacons();
+                        //ScanForNearBeacons();
                         listFarBeacons();
                     }
                     else if (!fuelcheck && finalPathCheck)

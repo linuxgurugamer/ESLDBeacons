@@ -26,7 +26,22 @@ namespace ESLDCore
 
         public void Update()
         {
-            if(FlightGlobals.ActiveVessel != null) // Grab active vessel.
+            if (isDazzling)
+            {
+                currentFOV = Mathf.Lerp(currentFOV, userFOV, 0.04f);
+                currentDistance = Mathf.Lerp(currentDistance, userDistance, 0.04f);
+                mainCam.SetFoV(currentFOV);
+                mainCam.SetDistance(currentDistance);
+                log.debug("Distance: " + currentDistance);
+                if (userFOV + 0.25 >= currentFOV)
+                {
+                    mainCam.SetFoV(userFOV);
+                    mainCam.SetDistance(userDistance);
+                    log.debug("Done messing with camera!");
+                    isDazzling = false;
+                }
+            }
+            if (FlightGlobals.ActiveVessel != null) // Grab active vessel.
             {
                 vessel = FlightGlobals.ActiveVessel;
                 if (vessel.FindPartModulesImplementing<ESLDHailer>().Count == 0) // Has a hailer?
@@ -62,25 +77,6 @@ namespace ESLDCore
                 if (this.button.toggleButton.CurrentState == KSP.UI.UIRadioButton.State.False && hailer.guiopen)
                 {
                     this.button.SetTrue();
-                }
-            }
-        }
-
-        public void FixedUpdate()
-        {
-            if (isDazzling)
-            {
-                currentFOV = Mathf.Lerp(currentFOV, userFOV, 0.04f);
-                currentDistance = Mathf.Lerp(currentDistance, userDistance, 0.04f);
-                mainCam.SetFoV(currentFOV);
-                mainCam.SetDistance(currentDistance);
-                log.debug("Distance: " + currentDistance);
-                if (userFOV + 0.25 >= currentFOV)
-                {
-                    mainCam.SetFoV(userFOV);
-                    mainCam.SetDistance(userDistance);
-                    log.debug("Done messing with camera!");
-                    isDazzling = false;
                 }
             }
         }
