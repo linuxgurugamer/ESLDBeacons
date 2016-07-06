@@ -181,43 +181,46 @@ namespace ESLDCore
         {
             opFloor = findAcceptableAltitude(vessel.mainBody); // Keep updating tooltip display.
             if (FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude <= gLimitEff) Fields["neededEC"].guiActive = !activated;
-            Fields["constantEC"].guiActive = activated;
+            //Fields["constantEC"].guiActive = activated;
             foreach (ESLDJumpResource Jresource in jumpResources)
                 Jresource.getFuelOnBoard(vessel);
         }
 
         public override void OnFixedUpdate()
         {
-            if (FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude > gLimitEff)
+            if (activated)
             {
-                ScreenMessages.PostScreenMessage("Warning: Too deep in gravity well.  Beacon has been shut down for safety.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
-                BeaconShutdown();
-            }
-            if (vessel.altitude < (vessel.mainBody.Radius * 0.25f))
-            {
-                string thevar = (vessel.mainBody.name == "Mun" || vessel.mainBody.name == "Sun") ? "the " : string.Empty;
-                ScreenMessages.PostScreenMessage("Warning: Too close to " + thevar + vessel.mainBody.name + ".  Beacon has been shut down for safety.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
-                BeaconShutdown();
-            }
-
-            if (!requireResource(vessel, "ElectricCharge", TimeWarp.deltaTime * constantEC , true))
-            {
-                ScreenMessages.PostScreenMessage("Warning: Electric Charge depleted.  Beacon has been shut down.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
-                BeaconShutdown();
-            }
-            if (needsResourcesToBoot)
-            {
-                foreach (ESLDJumpResource Jresource in jumpResources)
+                if (FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude > gLimitEff)
                 {
-                    if (Jresource.neededToBoot && !requireResource(vessel, Jresource.name, double.Epsilon, false))
+                    ScreenMessages.PostScreenMessage("Warning: Too deep in gravity well.  Beacon has been shut down for safety.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
+                    BeaconShutdown();
+                }
+                if (vessel.altitude < (vessel.mainBody.Radius * 0.25f))
+                {
+                    string thevar = (vessel.mainBody.name == "Mun" || vessel.mainBody.name == "Sun") ? "the " : string.Empty;
+                    ScreenMessages.PostScreenMessage("Warning: Too close to " + thevar + vessel.mainBody.name + ".  Beacon has been shut down for safety.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
+                    BeaconShutdown();
+                }
+
+                if (!requireResource(vessel, "ElectricCharge", TimeWarp.deltaTime * constantEC, true))
+                {
+                    ScreenMessages.PostScreenMessage("Warning: Electric Charge depleted.  Beacon has been shut down.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
+                    BeaconShutdown();
+                }
+                if (needsResourcesToBoot)
+                {
+                    foreach (ESLDJumpResource Jresource in jumpResources)
                     {
-                        ScreenMessages.PostScreenMessage("Warning: " + Jresource.name + " depleted.  Beacon has been shut down.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
-                        BeaconShutdown();
-                        break;
+                        if (Jresource.neededToBoot && !requireResource(vessel, Jresource.name, double.Epsilon, false))
+                        {
+                            ScreenMessages.PostScreenMessage("Warning: " + Jresource.name + " depleted.  Beacon has been shut down.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
+                            BeaconShutdown();
+                            break;
+                        }
                     }
                 }
+                //part.AddThermalFlux(TimeWarp.deltaTime * constantEC * 10);  // Not feasible until the fluctuation with high warp is nailed down.
             }
-            //part.AddThermalFlux(TimeWarp.deltaTime * constantEC * 10);  // Not feasible until the fluctuation with high warp is nailed down.
         }
 
         // Calculate base cost in units of Karborundum before penalties for a transfer.
