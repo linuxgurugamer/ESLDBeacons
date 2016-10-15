@@ -179,7 +179,6 @@ namespace ESLDCore
 
         public override void OnUpdate()
         {
-            opFloor = findAcceptableAltitude(vessel.mainBody); // Keep updating tooltip display.
             if (FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude <= gLimitEff) Fields["neededEC"].guiActive = !activated;
             //Fields["constantEC"].guiActive = activated;
             foreach (ESLDJumpResource Jresource in jumpResources)
@@ -188,6 +187,7 @@ namespace ESLDCore
 
         public override void OnFixedUpdate()
         {
+            opFloor = findAcceptableAltitude(); // Keep updating tooltip display. Also, needed EC.
             if (activated)
             {
                 if (FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude > gLimitEff)
@@ -201,8 +201,8 @@ namespace ESLDCore
                     ScreenMessages.PostScreenMessage("Warning: Too close to " + thevar + vessel.mainBody.name + ".  Beacon has been shut down for safety.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
                     BeaconShutdown();
                 }
-
-                if (!requireResource(vessel, "ElectricCharge", TimeWarp.deltaTime * constantEC, true))
+                if (!Double.IsNaN(constantEC) &&
+                    part.RequestResource("ElectricCharge", constantEC * TimeWarp.fixedDeltaTime) <= constantEC * TimeWarp.fixedDeltaTime * 0.9)
                 {
                     ScreenMessages.PostScreenMessage("Warning: Electric Charge depleted.  Beacon has been shut down.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
                     BeaconShutdown();
@@ -219,7 +219,7 @@ namespace ESLDCore
                         }
                     }
                 }
-                //part.AddThermalFlux(TimeWarp.deltaTime * constantEC * 10);  // Not feasible until the fluctuation with high warp is nailed down.
+                //part.AddThermalFlux(TimeWarp.fixedDeltaTime * constantEC * 10);  // Not feasible until the fluctuation with high warp is nailed down.
             }
         }
 
@@ -310,6 +310,11 @@ namespace ESLDCore
         }
 
         // Given a target body, get minimum ASL where beacon can function in km.
+        public double findAcceptableAltitude()
+        {
+            return findAcceptableAltitude(vessel.mainBody);
+        }
+
         public double findAcceptableAltitude(CelestialBody targetbody)
         {
             gLimitEff = gLimit;
@@ -391,6 +396,11 @@ namespace ESLDCore
         // Simple bool for resource checking and usage.  Returns true and optionally uses resource if resAmount of res is available.
         public bool requireResource(Vessel craft, string res, double resAmount, bool consumeResource = false)
         {
+            if (Double.IsNaN(resAmount))
+            {
+                log.error("NaN requested.");
+                return true;
+            }
             if (!craft.loaded) return false; // Unloaded resource checking is unreliable.
             Dictionary<PartResource, double> toDraw = new Dictionary<PartResource,double>();
             double resRemaining = resAmount;
@@ -400,6 +410,7 @@ namespace ESLDCore
                 {
                     if (cRes.resourceName != res) continue;
                     if (cRes.amount == 0) continue;
+                    //if (cRes.flowState == false) continue;
                     if (cRes.amount >= resRemaining)
                     {
                         toDraw.Add(cRes, resRemaining);
@@ -465,6 +476,7 @@ namespace ESLDCore
                 //          part.AddThermalFlux(neededEC * 10);
                 activated = true;
                 part.force_activate();
+                opFloor = findAcceptableAltitude(); // Keep updating tooltip display. Also, needed EC.
                 Fields["neededEC"].guiActive = false;
                 Fields["constantEC"].guiActive = true;
                 Events["BeaconInitialize"].active = false;
@@ -529,15 +541,6 @@ namespace ESLDCore
             else
                 log.warning("Can only shut down when activated!");
         }
-
-        /*public override void OnSave(ConfigNode node)
-        {
-            base.OnSave(node);
-            foreach (ESLDJumpResource Jresource in jumpResources)
-            {
-                node.AddNode(Jresource.OnSave());
-            }
-        }*/
 
         public override void OnLoad(ConfigNode node)
         {
@@ -606,7 +609,7 @@ namespace ESLDCore
             if (HighLogic.LoadedSceneIsFlight)
             {
                 checkOwnTechBoxes();
-                opFloor = findAcceptableAltitude(vessel.mainBody); // Update tooltip display.
+                opFloor = findAcceptableAltitude(); // Update tooltip display.
             }
         }
 

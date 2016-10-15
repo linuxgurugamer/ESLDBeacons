@@ -134,6 +134,25 @@ namespace ESLDCore
             }
             if (alwaysActive)
                 TechBoxOn();
+            else if (activated)
+            {
+                part.force_activate();
+                forceUpdateTechboxes();
+                techBoxStatus = techBoxModel + " Active.";
+                Events["TechBoxOn"].active = false;
+                Events["TechBoxOff"].active = !alwaysActive;
+                Actions["activateTBAction"].active = false;
+                Actions["deactivateTBAction"].active = !alwaysActive;
+                Actions["toggleTBAction"].active = !alwaysActive;
+            }
+            else if (!activated)
+            {
+                techBoxStatus = techBoxModel + " Inactive.";
+                Events["TechBoxOn"].active = true;
+                Events["TechBoxOff"].active = false;
+                Actions["activateTBAction"].active = true;
+                Actions["deactivateTBAction"].active = false;
+            }
         }
 
         public override string GetInfo()

@@ -27,9 +27,7 @@ namespace ESLDCore
         protected Rect ConfirmWindow;
         public ESLDBeacon nearBeacon = null;
         public Vessel farBeaconVessel = null;
-        public ESLDBeacon farBeacon = null;
-        public string farBeaconModel = "";
-        public Dictionary<ESLDBeacon, Vessel> farTargets = new Dictionary<ESLDBeacon, Vessel>();
+        public List<Vessel> farTargets = new List<Vessel>();
         public Dictionary<ESLDBeacon, string> nearBeacons = new Dictionary<ESLDBeacon, string>();
         public double precision;
         public OrbitDriver oPredictDriver = null;
@@ -154,13 +152,13 @@ namespace ESLDCore
         public void listFarBeacons()
         {
             farTargets.Clear();
-            foreach (Vessel craft in FlightGlobals.Vessels.FindAll(
-                (Vessel c) =>
-                c.loaded == false &&
-                c != vessel &&
-                c != FlightGlobals.ActiveVessel &&
-                c.situation == Vessel.Situations.ORBITING))
+            foreach (Vessel craft in FlightGlobals.VesselsUnloaded)
             {
+                if (craft == vessel) continue;
+                if (craft == FlightGlobals.ActiveVessel) continue;
+                //if (craft.situation != Vessel.Situations.ORBITING) continue;
+
+                bool vesselAdded = false;
                 foreach (ProtoPartSnapshot ppart in craft.protoVessel.protoPartSnapshots)
                 {
                     foreach (ProtoPartModuleSnapshot pmod in ppart.modules.FindAll(
@@ -168,18 +166,35 @@ namespace ESLDCore
                     {
                         if (pmod.moduleValues.GetValue("activated") == "True")
                         {
-                            ESLDBeacon protoBeacon = new ESLDBeacon(pmod.moduleValues, ppart.partInfo.partConfig.GetNodes("MODULE")[ppart.modules.IndexOf(pmod)]);
-                            protoBeacon.activated = true;
-                            // Not sure why, but this check seems to be necessary to avoid ArgumentException: An element with the same key...
-                            // In my mind, the .Clear() above combined with only looping through each part once shouldn't cause that exception.
-                            // Unless maybe if there is more than one ESLDBeacon module on a part?
-                            // Either way, if there are ever bugs reported of far targets not showing up in the list, this may be the culprit.
-                            if (!farTargets.Keys.Contains(protoBeacon))
-                                farTargets.Add(protoBeacon, craft);
+                            if (!farTargets.Contains(craft))
+                                farTargets.Add(craft);
+                            vesselAdded = true;
+                            break;
                         }
+                    }
+                    if (vesselAdded)
+                        break;
+                }
+            }
+        }
+
+        public List<ESLDBeacon> getBeaconsOnTarget(Vessel craft)
+        {
+            List<ESLDBeacon> value = new List<ESLDBeacon>();
+            foreach (ProtoPartSnapshot ppart in craft.protoVessel.protoPartSnapshots)
+            {
+                foreach (ProtoPartModuleSnapshot pmod in ppart.modules.FindAll(
+                    (ProtoPartModuleSnapshot p) => p.moduleName == "ESLDBeacon"))
+                {
+                    if (pmod.moduleValues.GetValue("activated") == "True")
+                    {
+                        ESLDBeacon protoBeacon = new ESLDBeacon(pmod.moduleValues, ppart.partInfo.partConfig.GetNodes("MODULE")[ppart.modules.IndexOf(pmod)]);
+                        protoBeacon.activated = true;
+                        value.Add(protoBeacon);
                     }
                 }
             }
+            return value;
         }
 
         public override void OnUpdate()
@@ -250,9 +265,9 @@ namespace ESLDCore
                     if (vessel.GetCrewCount() > 0) GUILayout.Label("Transfer will kill crew.");
                     if (HCUParts.Count > 0) GUILayout.Label("Some resources will destabilize.");
                 }
-                foreach (KeyValuePair<ESLDBeacon, Vessel> ftarg in farTargets)
+                foreach (Vessel farTargetVessel in farTargets)
                 {
-                    double tripdist = Vector3d.Distance(nbparent.GetWorldPos3D(), ftarg.Value.GetWorldPos3D());
+                    double tripdist = Vector3d.Distance(nbparent.GetWorldPos3D(), farTargetVessel.GetWorldPos3D());
                     double tripcost = nearBeacon.getTripBaseCost(tripdist, tonnage);
                     double sciBonus = nearBeacon.getCrewBonuses(nbparent, "Scientist", 0.5, 5);
                     if (nearBeacon.hasSCU)
@@ -269,13 +284,13 @@ namespace ESLDCore
                     }
                     if (tripcost == 0) continue;
                     tripcost += tripcost * (driftpenalty * .01);
-                    if (nearBeacon.hasAMU) tripcost += nearBeacon.getAMUCost(vessel, ftarg.Value, tonnage);
+                    if (nearBeacon.hasAMU) tripcost += nearBeacon.getAMUCost(vessel, farTargetVessel, tonnage);
                     double HCUCost = nearBeacon.getHCUCost(vessel, HCUParts.Keys);
                     if (nearBeacon.builtInHCU) HCUCost = Math.Round((HCUCost - (tripcost * 0.02)) * 100) / 100;
                     if (nearBeacon.hasHCU) tripcost += HCUCost;
                     tripcost = Math.Round(tripcost * 100) / 100;
-                    string targetSOI = ftarg.Value.mainBody.name;
-                    double targetAlt = Math.Round(ftarg.Value.altitude / 1000);
+                    string targetSOI = farTargetVessel.mainBody.name;
+                    double targetAlt = Math.Round(farTargetVessel.altitude / 1000);
                     GUIStyle fuelstate = buttonNoFuel;
                     string blockReason = "";
                     string blockRock = "";
@@ -291,7 +306,7 @@ namespace ESLDCore
                     if (affordable) // Show blocked status only for otherwise doable transfers.
                     {
                         fuelstate = buttonHasFuel;
-                        KeyValuePair<string, CelestialBody> checkpath = HasTransferPath(nbparent, ftarg.Value, nearBeacon.gLimitEff);
+                        KeyValuePair<string, CelestialBody> checkpath = HasTransferPath(nbparent, farTargetVessel, nearBeacon.gLimitEff);
                         if (checkpath.Key != "OK")
                         {
                             fuelstate = buttonNoPath;
@@ -299,15 +314,13 @@ namespace ESLDCore
                             blockRock = checkpath.Value.name;
                         }
                     }
-                    if (GUILayout.Button(ftarg.Key.beaconModel + " " + ftarg.Value.vesselName + "(" + targetSOI + ", " + targetAlt + "km) | " + tripcost, fuelstate))
+                    if (GUILayout.Button(farTargetVessel.vesselName + "(" + targetSOI + ", " + targetAlt + "km) | " + tripcost, fuelstate))
                     {
                         if (fuelstate == buttonHasFuel)
                         {
-                            farBeaconVessel = ftarg.Value;
-                            farBeacon = ftarg.Key;
-                            farBeaconModel = farBeacon.beaconModel;
+                            farBeaconVessel = farTargetVessel;
                             drawConfirm();
-                            if (!nearBeacon.hasAMU) showExitOrbit(vessel, farBeaconVessel);
+                            if (!nearBeacon.hasAMU) showExitOrbit(vessel, farTargetVessel);
                             //RenderingManager.AddToPostDrawQueue(4, new Callback(drawConfirm));
                             drawConfirmOn = true;
                             //RenderingManager.RemoveFromPostDrawQueue(3, new Callback(drawGUI));
@@ -318,7 +331,7 @@ namespace ESLDCore
                         else
                         {
                             log.info("Current beacon has a g limit of " + nearBeacon.gLimitEff);
-                            string messageToPost = "I can't tell why the jump won't work. Please report this error.";
+                            string messageToPost = "I can't tell why the jump won't work. Please report this error with your save file and log.";
                             if (!affordable)
                             {
                                 foreach(ESLDJumpResource Jresource in nearBeacon.jumpResources)
@@ -400,6 +413,7 @@ namespace ESLDCore
                 }
                 GUILayout.Label("Confirm Warp:");
                 var basecost = Math.Round(tripcost * 100) / 100;
+                log.debug("Base cost: " + basecost + "/" + nearBeacon.jumpResources.Count());
                 string tempLabel;
                 tempLabel = "Base Cost: ";
                 foreach (ESLDJumpResource Jresource in nearBeacon.jumpResources)
@@ -464,22 +478,12 @@ namespace ESLDCore
                 }
                 GUILayout.Label(tempLabel + ".");
                 GUILayout.Label("Destination: " + farBeaconVessel.mainBody.name + " at " + Math.Round(farBeaconVessel.altitude / 1000) + "km.");
-                precision = farBeacon.getTripSpread(tripdist);
-                GUILayout.Label("Transfer will emerge within " + precision + "m of destination beacon.");
-                if (farBeaconVessel.altitude - precision <= farBeaconVessel.mainBody.Radius * 0.1f || farBeaconVessel.altitude - precision <= farBeaconVessel.mainBody.atmosphereDepth)
-                {
-                    GUILayout.Label("Arrival area is very close to " + farBeaconVessel.mainBody.name + ".", labelNoFuel);
-                }
-                if (!nearBeacon.hasAMU)
-                {
-                    Vector3d transferVelOffset = getJumpVelOffset(vessel, farBeaconVessel, nearBeacon) - farBeaconVessel.orbit.vel;
-                    GUILayout.Label("Velocity relative to exit beacon will be " + Math.Round(transferVelOffset.magnitude) + "m/s.");
-                }
+                List<ESLDBeacon> beaconsOnFarBeaconVessel = getBeaconsOnTarget(farBeaconVessel);
+                precision = 0;
                 double retTripCost = 0;
                 bool fuelcheck = false;
                 bool affordReturn = true;
                 ESLDBeacon cheapFarBeacon = new ESLDBeacon();
-                List<ESLDBeacon> beaconsOnFarBeaconVessel = farTargets.Where(p => p.Value == farBeaconVessel).Select(p => p.Key).ToList();
                 foreach (ESLDBeacon tempFarBeacon in beaconsOnFarBeaconVessel)
                 {
                     if (retTripCost == 0)
@@ -491,11 +495,32 @@ namespace ESLDCore
                     {
                         double tempCost = tempFarBeacon.getTripBaseCost(tripdist, tonnage);
                         if (tempCost < retTripCost)
+                        // Maybe add a check if this beacon has sufficient fuel?
+                        // It may be the cheapest, but if different beacons use different fuel types, this could return that the far beacon
+                        // does not have sufficient fuel even though a different beacon on the target vessel does.
                         {
                             retTripCost = tempCost;
                             cheapFarBeacon = tempFarBeacon;
                         }
                     }
+                    if (precision == 0)
+                        precision = tempFarBeacon.getTripSpread(tripdist);
+                    else
+                    {
+                        double tempPrecision = tempFarBeacon.getTripSpread(tripdist);
+                        if (tempPrecision < precision)
+                            precision = tempPrecision;
+                    }
+                }
+                GUILayout.Label("Transfer will emerge within " + precision + "m of destination beacon.");
+                if (farBeaconVessel.altitude - precision <= farBeaconVessel.mainBody.Radius * 0.1f || farBeaconVessel.altitude - precision <= farBeaconVessel.mainBody.atmosphereDepth)
+                {
+                    GUILayout.Label("Arrival area is very close to " + farBeaconVessel.mainBody.name + ".", labelNoFuel);
+                }
+                if (!nearBeacon.hasAMU)
+                {
+                    Vector3d transferVelOffset = getJumpVelOffset(vessel, farBeaconVessel, nearBeacon) - farBeaconVessel.orbit.vel;
+                    GUILayout.Label("Velocity relative to exit beacon will be " + Math.Round(transferVelOffset.magnitude) + "m/s.");
                 }
                 fuelcheck = cheapFarBeacon.jumpResources.All((ESLDJumpResource jr) => jr.fuelCheck);
                 string fuelmessage = "Destination beacon's fuel could not be checked.";
@@ -504,7 +529,7 @@ namespace ESLDCore
                     fuelmessage = "Destination beacon has ";
                     foreach (ESLDJumpResource Jresource in cheapFarBeacon.jumpResources)
                     {
-                        fuelmessage += Jresource.fuelOnBoard + " " + Jresource.name;
+                        fuelmessage += Jresource.fuelOnBoard.ToString("F2") + " " + Jresource.name;
                         if (cheapFarBeacon.jumpResources.IndexOf(Jresource) + 1 < nearBeacon.jumpResources.Count())
                             fuelmessage += ", ";
                         if (retTripCost * Jresource.ratio > Jresource.fuelOnBoard)
