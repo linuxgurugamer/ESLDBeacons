@@ -114,15 +114,19 @@ namespace ESLDCore
         public const string RnodeName = "RESOURCE";
         Logger log = new Logger("ESLDCore:ESLDBeacons: ");
 
-        public ESLDBeacon() { }
+        private int ECid;
+
+        public ESLDBeacon() { ECid = PartResourceLibrary.Instance.GetDefinition("ElectricCharge").id; }
         public ESLDBeacon(ConfigNode CFGnode)
         {
             this.buildFromConfigNode(CFGnode);
+            ECid = PartResourceLibrary.Instance.GetDefinition("ElectricCharge").id;
         }
         public ESLDBeacon(ConfigNode savenode, ConfigNode CFGnode)
         {
             this.buildFromConfigNode(CFGnode);
             this.buildFromConfigNode(savenode);
+            ECid = PartResourceLibrary.Instance.GetDefinition("ElectricCharge").id;
         }
 
         protected void buildFromConfigNode(ConfigNode node)
@@ -201,17 +205,19 @@ namespace ESLDCore
                     ScreenMessages.PostScreenMessage("Warning: Too close to " + thevar + vessel.mainBody.name + ".  Beacon has been shut down for safety.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
                     BeaconShutdown();
                 }
+                double ECgotten = part.RequestResource("ElectricCharge", constantEC * TimeWarp.fixedDeltaTime);
                 if (!Double.IsNaN(constantEC) &&
-                    part.RequestResource("ElectricCharge", constantEC * TimeWarp.fixedDeltaTime) <= constantEC * TimeWarp.fixedDeltaTime * 0.9)
+                    ECgotten <= constantEC * TimeWarp.fixedDeltaTime * 0.9)
                 {
                     ScreenMessages.PostScreenMessage("Warning: Electric Charge depleted.  Beacon has been shut down.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
+                    log.debug("Requested: " + constantEC + ", got: " + ECgotten / TimeWarp.fixedDeltaTime);
                     BeaconShutdown();
                 }
                 if (needsResourcesToBoot)
                 {
                     foreach (ESLDJumpResource Jresource in jumpResources)
                     {
-                        if (Jresource.neededToBoot && !requireResource(vessel, Jresource.name, double.Epsilon, false))
+                        if (Jresource.neededToBoot && !requireResource(vessel, Jresource.resID, double.Epsilon, false))
                         {
                             ScreenMessages.PostScreenMessage("Warning: " + Jresource.name + " depleted.  Beacon has been shut down.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
                             BeaconShutdown();
@@ -396,40 +402,65 @@ namespace ESLDCore
         // Simple bool for resource checking and usage.  Returns true and optionally uses resource if resAmount of res is available.
         public bool requireResource(Vessel craft, string res, double resAmount, bool consumeResource = false)
         {
+            return requireResource(craft, PartResourceLibrary.Instance.GetDefinition(res).id, resAmount, consumeResource);
+        }
+        public bool requireResource(Vessel craft, int resID, double resAmount, bool consumeResource = false)
+        {
             if (Double.IsNaN(resAmount))
             {
                 log.error("NaN requested.");
                 return true;
             }
-            if (!craft.loaded) return false; // Unloaded resource checking is unreliable.
-            Dictionary<PartResource, double> toDraw = new Dictionary<PartResource,double>();
-            double resRemaining = resAmount;
-            foreach (Part cPart in craft.Parts)
+
+            if (!craft.loaded)
             {
-                foreach (PartResource cRes in cPart.Resources)
+                log.warning("Tried to get resources of unloaded craft.");
+                return false; // Unloaded resource checking is unreliable.
+            }
+
+            double amount;
+            double maxamount;
+            part.GetConnectedResourceTotals(resID, out amount, out maxamount);
+
+            if (amount < resAmount)
+                return false;
+
+            if (consumeResource)
+                part.RequestResource(resID, resAmount);
+            return true;
+        }
+
+        public bool CheckInitialize()
+        {
+            if (needsResourcesToBoot)
+            {
+                foreach (ESLDJumpResource Jresource in jumpResources)
                 {
-                    if (cRes.resourceName != res) continue;
-                    if (cRes.amount == 0) continue;
-                    //if (cRes.flowState == false) continue;
-                    if (cRes.amount >= resRemaining)
+                    if (Jresource.neededToBoot && !requireResource(vessel, Jresource.resID, double.Epsilon, false))
                     {
-                        toDraw.Add(cRes, resRemaining);
-                        resRemaining = 0;
-                    } else
-                    {
-                        toDraw.Add(cRes, cRes.amount);
-                        resRemaining -= cRes.amount;
+                        ScreenMessages.PostScreenMessage("Cannot activate!  Insufficient " + Jresource.name + " to initiate reaction.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
+                        return false;
                     }
                 }
-                if (resRemaining <= 0) break;
             }
-            if (resRemaining > 0) return false;
-            if (consumeResource)
+            if (FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude > gLimitEff) // Check our G forces.
             {
-                foreach (KeyValuePair<PartResource, double> drawSource in toDraw)
-                {
-                    drawSource.Key.amount -= drawSource.Value;
-                }
+                log.warning("Too deep in gravity well to activate!");
+                string thevar = (vessel.mainBody.name == "Mun" || vessel.mainBody.name == "Sun") ? "the " : string.Empty;
+                ScreenMessages.PostScreenMessage("Cannot activate!  Gravity from " + thevar + vessel.mainBody.name + " is too strong.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
+                return false;
+            }
+            if (vessel.altitude < (vessel.mainBody.Radius * .25f)) // Check for radius limit.
+            {
+                string thevar = (vessel.mainBody.name == "Mun" || vessel.mainBody.name == "Sun") ? "the " : string.Empty;
+                ScreenMessages.PostScreenMessage("Cannot activate!  Beacon is too close to " + thevar + vessel.mainBody.name + ".", 5.0f, ScreenMessageStyle.UPPER_CENTER);
+                return false;
+            }
+            if (!requireResource(vessel, "ElectricCharge", neededEC, true))
+            {
+                ScreenMessages.PostScreenMessage("Cannot activate!  Insufficient electric power to initiate reaction.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
+                log.debug("Couldn't activate, " + neededEC + " EC needed.");
+                return false;
             }
             return true;
         }
@@ -444,35 +475,8 @@ namespace ESLDCore
                 log.info("Crew bonus: Engineers on board reduce electrical usage by: " + (1 - getCrewBonuses(vessel, "Engineer", 0.5, 5)) * 100 + "%");
                 log.info("Crew bonus: Scientists on board reduce jump costs by: " + (1 - getCrewBonuses(vessel, "Scientist", 0.5, 5)) * 100 + "%");
                 log.info("Crew bonus: Pilots on board reduce drift by: " + (1 - getCrewBonuses(vessel, "Pilot", 0.5, 5)) * 100 + "%");
-                if (needsResourcesToBoot)
-                {
-                    foreach (ESLDJumpResource Jresource in jumpResources)
-                    {
-                        if (Jresource.neededToBoot && !requireResource(vessel, Jresource.name, double.Epsilon, false))
-                        {
-                            ScreenMessages.PostScreenMessage("Cannot activate!  Insufficient " + Jresource.name + " to initiate reaction.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
-                            return;
-                        }
-                    }
-                }
-                if (FlightGlobals.getGeeForceAtPosition(vessel.GetWorldPos3D()).magnitude > gLimitEff) // Check our G forces.
-                {
-                    log.warning("Too deep in gravity well to activate!");
-                    string thevar = (vessel.mainBody.name == "Mun" || vessel.mainBody.name == "Sun") ? "the " : string.Empty;
-                    ScreenMessages.PostScreenMessage("Cannot activate!  Gravity from " + thevar + vessel.mainBody.name + " is too strong.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
+                if (!CheckInitialize())
                     return;
-                }
-                if (vessel.altitude < (vessel.mainBody.Radius * .25f)) // Check for radius limit.
-                {
-                    string thevar = (vessel.mainBody.name == "Mun" || vessel.mainBody.name == "Sun") ? "the " : string.Empty;
-                    ScreenMessages.PostScreenMessage("Cannot activate!  Beacon is too close to " + thevar + vessel.mainBody.name + ".", 5.0f, ScreenMessageStyle.UPPER_CENTER);
-                    return;
-                }
-                if (!requireResource(vessel, "ElectricCharge", neededEC, true))
-                {
-                    ScreenMessages.PostScreenMessage("Cannot activate!  Insufficient electric power to initiate reaction.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
-                    return;
-                }
                 //          part.AddThermalFlux(neededEC * 10);
                 activated = true;
                 part.force_activate();
@@ -654,6 +658,7 @@ namespace ESLDCore
     public class ESLDJumpResource
     {
         public string name;
+        public int resID;
         public float ratio = 1;
         public double fuelOnBoard = 0;
         public float ECMult = 1;
@@ -677,6 +682,7 @@ namespace ESLDCore
                 this.fuelCheck = fuelCheck;
             if (ECMult == 1 && HEResources.ContainsKey(this.name))
                 this.ECMult = HEResources[this.name];
+            resID = PartResourceLibrary.Instance.GetDefinition(this.name).id;
         }
         public ESLDJumpResource(ConfigNode node)
         {
@@ -704,6 +710,7 @@ namespace ESLDCore
                 this.minEC = tempfloat;
             if (bool.TryParse(node.GetValue("neededToBoot"), out tempbool))
                 this.neededToBoot = tempbool;
+            resID = PartResourceLibrary.Instance.GetDefinition(this.name).id;
         }
 
         public ConfigNode OnSave()

@@ -575,12 +575,12 @@ namespace ESLDCore
                     if (checkpath.Key == "OK") finalPathCheck = true;
                     // Check fuel one last time.
                     fuelcheck = nearBeacon.jumpResources.All((ESLDJumpResource Jresource) =>
-                        nearBeacon.requireResource(nbparent, Jresource.name, tripcost * Jresource.ratio, false));
+                        nearBeacon.requireResource(nbparent, Jresource.resID, tripcost * Jresource.ratio, false));
                     if (fuelcheck && finalPathCheck) // Fuel is valid for and path is clear.
                     {
                         // Pay fuel
                         foreach (ESLDJumpResource Jresource in nearBeacon.jumpResources)
-                            nearBeacon.requireResource(nbparent, Jresource.name, tripcost * Jresource.ratio, true);
+                            nearBeacon.requireResource(nbparent, Jresource.resID, tripcost * Jresource.ratio, true);
                         // Buckle up!
                         if (!nearBeacon.hasHCU) // Penalize for HCU not being present/online.
                         {
