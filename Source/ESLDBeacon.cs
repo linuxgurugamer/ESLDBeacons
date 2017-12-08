@@ -206,7 +206,7 @@ namespace ESLDCore
                     BeaconShutdown();
                 }
                 double ECgotten = part.RequestResource("ElectricCharge", constantEC * TimeWarp.fixedDeltaTime);
-                if (!Double.IsNaN(constantEC) &&
+                if (!Double.IsNaN(constantEC) && (constantEC > 0) &&
                     ECgotten <= constantEC * TimeWarp.fixedDeltaTime * 0.9)
                 {
                     ScreenMessages.PostScreenMessage("Warning: Electric Charge depleted.  Beacon has been shut down.", 5.0f, ScreenMessageStyle.UPPER_CENTER);

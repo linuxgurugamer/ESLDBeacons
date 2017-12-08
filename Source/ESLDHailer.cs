@@ -891,7 +891,7 @@ namespace ESLDCore
             oPredict.orbitColor = Color.red;
             oPredict.drawIcons = OrbitRenderer.DrawIcons.OBJ_PE_AP;
             oPredict.drawMode = OrbitRenderer.DrawMode.REDRAW_AND_RECALCULATE;
-            oPredict.DrawOrbit(OrbitRenderer.DrawMode.REDRAW_AND_RECALCULATE);
+            //oPredict.DrawOrbit(OrbitRenderer.DrawMode.REDRAW_AND_RECALCULATE);
             oPredict.enabled = true;
 
             // Directional indicator.
