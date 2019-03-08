@@ -311,11 +311,8 @@ namespace ESLDCore
                         if (fuelstate == buttonHasFuel)
                         {
                             farBeaconVessel = farTargetVessel;
-                            //DrawConfirm();
                             if (!nearBeacon.hasAMU) ShowExitOrbit(vessel, farTargetVessel);
-                            //RenderingManager.AddToPostDrawQueue(4, new Callback(drawConfirm));
                             drawConfirmOn = true;
-                            //RenderingManager.RemoveFromPostDrawQueue(3, new Callback(drawGUI));
                             drawGUIOn = false;
                             Events["HailerGUIClose"].active = false;
                             Events["HailerGUIOpen"].active = true;
@@ -362,7 +359,6 @@ namespace ESLDCore
             }
             GUILayout.EndVertical();
             GUI.DragWindow(new Rect(0, 0, 10000, 20));
-
         }
 
         public void Update()
@@ -436,7 +432,7 @@ namespace ESLDCore
                 }
                 GUILayout.Label("Confirm Warp:");
                 var basecost = Math.Round(tripcost * 100) / 100;
-                //log.debug("Base cost: " + basecost + "/" + nearBeacon.jumpResources.Count());
+                //log.Debug("Base cost: " + basecost + "/" + nearBeacon.jumpResources.Count());
                 string tempLabel;
                 tempLabel = "Base Cost: ";
                 foreach (ESLDJumpResource Jresource in nearBeacon.jumpResources)
@@ -585,10 +581,8 @@ namespace ESLDCore
                     tempLabel += " (base cost) for return trip using active beacons.";
                     GUILayout.Label(tempLabel, labelNoFuel);
                 }
-                //UpdateExitOrbit(vessel, farBeaconVessel); //Moved to Update()
                 if (GUILayout.Button("Confirm and Warp", buttonNeutral))
                 {
-                    //RenderingManager.RemoveFromPostDrawQueue(4, new Callback(drawConfirm));
                     drawConfirmOn = false;
                     HailerGUIClose();
                     HideExitOrbit();
@@ -693,15 +687,6 @@ namespace ESLDCore
 
                         if (vessel.orbitDriver.orbit.referenceBody != oldBody)
                             GameEvents.onVesselSOIChanged.Fire (new GameEvents.HostedFromToAction<Vessel, CelestialBody> (vessel, oldBody, vessel.orbitDriver.orbit.referenceBody));
-//                        nbparent.GoOnRails();
-//                        vessel.GoOnRails();
-//                        vessel.situation = Vessel.Situations.ORBITING;
-//                        vessel.orbit.UpdateFromStateVectors(farBeaconVessel.orbit.pos + spread, transferVelOffset, farBeaconVessel.mainBody, Planetarium.GetUniversalTime());
-//                        vessel.orbit.Init();
-//                        vessel.orbit.UpdateFromUT(Planetarium.GetUniversalTime());
-//                        vessel.orbitDriver.pos = vessel.orbit.pos.xzy;
-//                        vessel.orbitDriver.vel = vessel.orbit.vel;
-                        //ScanForNearBeacons();
                         ListFarBeacons();
                     }
                     else if (!fuelcheck && finalPathCheck)
@@ -724,13 +709,11 @@ namespace ESLDCore
             }
             if (!vessel.isActiveVessel)
             {
-                //RenderingManager.RemoveFromPostDrawQueue(4, new Callback(drawConfirm));
                 drawConfirmOn = false;
                 HideExitOrbit();
             }
             if (GUILayout.Button("Back", buttonNeutral))
             {
-                //RenderingManager.RemoveFromPostDrawQueue(4, new Callback(drawConfirm));
                 drawConfirmOn = false;
                 HailerGUIOpen();
                 HideExitOrbit();
@@ -783,7 +766,6 @@ namespace ESLDCore
         [KSPEvent(name = "HailerGUIOpen", active = false, guiActive = true, guiName = "Beacon Interface")]
         public void HailerGUIOpen()
         {
-            //RenderingManager.AddToPostDrawQueue(3, new Callback(drawGUI));
             drawGUIOn = true;
             Events["HailerGUIOpen"].active = false;
             Events["HailerGUIClose"].active = true;
@@ -792,7 +774,6 @@ namespace ESLDCore
         [KSPEvent(name = "HailerGUIClose", active = false, guiActive = true, guiName = "Close Interface")]
         public void HailerGUIClose()
         {
-            //RenderingManager.RemoveFromPostDrawQueue(3, new Callback(drawGUI));
             drawGUIOn = false;
             Events["HailerGUIClose"].active = false;
             Events["HailerGUIOpen"].active = true;
@@ -804,7 +785,6 @@ namespace ESLDCore
             isActive = false;
             HideExitOrbit();
             HailerGUIClose();
-            //RenderingManager.RemoveFromPostDrawQueue(4, new Callback(drawConfirm));
             drawConfirmOn = false;
             Events["HailerDeactivate"].active = false;
             Events["HailerActivate"].active = true;
@@ -830,7 +810,7 @@ namespace ESLDCore
             if (nearObject.mainBody.flightGlobalsIndex == farObject.mainBody.flightGlobalsIndex)
             {
                 farRealVelocity -= farObject.orbit.vel;
-                //              log.debug("In-system transfer, disregarding far beacon velocity.");
+                //log.Debug("In-system transfer, disregarding far beacon velocity.");
             }
             while (nearRefbody.flightGlobalsIndex != 0) // Kerbol
             {
@@ -1011,7 +991,6 @@ namespace ESLDCore
                 return;
             }
 
-            // Orbit prediction is broken for now FIXME!!
             Vector3 mapCamPos = ScaledSpace.ScaledToLocalSpace(MapView.MapCamera.transform.position);
             MapObject farTarget = MapView.MapCamera.target;
             Vector3 farTarPos = ScaledSpace.ScaledToLocalSpace(farTarget.transform.position);
@@ -1048,7 +1027,7 @@ namespace ESLDCore
 
             if (!predictionsDrawn)
                 return;
-            // Orbit prediction is broken for now FIXME!!
+            
             predictionOrbitRenderer.drawMode = OrbitRenderer.DrawMode.OFF;
             predictionOrbitRenderer.driver.drawOrbit = false;
             predictionOrbitRenderer.drawIcons = OrbitRenderer.DrawIcons.NONE;
@@ -1088,7 +1067,6 @@ namespace ESLDCore
         private MapObject FindVesselBody(Vessel craft)
         {
             int cInst = craft.mainBody.GetInstanceID();
-            //          foreach (MapObject mobj in MapView.FindObjectsOfType<MapObject>())
             foreach (MapObject mobj in MapView.MapCamera.targets)
             {
                 if (mobj.celestialBody == null) continue;
