@@ -32,12 +32,12 @@ namespace ESLDCore
                 currentDistance = Mathf.Lerp(currentDistance, userDistance, 0.04f);
                 mainCam.SetFoV(currentFOV);
                 mainCam.SetDistance(currentDistance);
-                log.debug("Distance: " + currentDistance);
+                //log.debug("Distance: " + currentDistance);
                 if (userFOV + 0.25 >= currentFOV)
                 {
                     mainCam.SetFoV(userFOV);
                     mainCam.SetDistance(userDistance);
-                    log.debug("Done messing with camera!");
+                    log.Debug("Done messing with camera!");
                     isDazzling = false;
                 }
             }
@@ -61,11 +61,11 @@ namespace ESLDCore
             }
             if (canHail && this.button == null)
             {
-                onGUIApplicationLauncherReady();
+                OnGUIApplicationLauncherReady();
             }
             if (!canHail && this.button != null)
             {
-                killButton();
+                KillButton();
             }
             // Sync GUI & Button States
             if (this.button != null)
@@ -84,25 +84,25 @@ namespace ESLDCore
         public void Awake()
         {
             //GameEvents.onGUIApplicationLauncherReady.Add(onGUIApplicationLauncherReady);
-            GameEvents.onGameSceneLoadRequested.Add(onSceneChangeRequest);
-            GameEvents.onVesselChange.Add(onVesselChange);
-            GameEvents.onGUIApplicationLauncherDestroyed.Add(killButton);
+            GameEvents.onGameSceneLoadRequested.Add(OnSceneChangeRequest);
+            GameEvents.onVesselChange.Add(OnVesselChange);
+            GameEvents.onGUIApplicationLauncherDestroyed.Add(KillButton);
             ESLDButtonOn = GameDatabase.Instance.GetTexture("ESLDBeacons/Textures/launcher", false);
             GameEvents.onGameSceneLoadRequested.Add(OnGameSceneLoadRequestedForAppLauncher);
             mainCam = FlightCamera.fetch;
         }
 
-        public void onDestroy()
+        public void OnDestroy()
         {
-            GameEvents.onGUIApplicationLauncherReady.Remove(onGUIApplicationLauncherReady);
-            GameEvents.onGameSceneLoadRequested.Remove(onSceneChangeRequest);
-            GameEvents.onVesselChange.Remove(onVesselChange);
-            GameEvents.onGUIApplicationLauncherDestroyed.Remove(killButton);
-            killButton();
+            GameEvents.onGUIApplicationLauncherReady.Remove(OnGUIApplicationLauncherReady);
+            GameEvents.onGameSceneLoadRequested.Remove(OnSceneChangeRequest);
+            GameEvents.onVesselChange.Remove(OnVesselChange);
+            GameEvents.onGUIApplicationLauncherDestroyed.Remove(KillButton);
+            KillButton();
             GameEvents.onGameSceneLoadRequested.Remove(OnGameSceneLoadRequestedForAppLauncher);
         }
 
-        private void onTrue()
+        private void OnTrue()
         {
             if (hailer != null)
             {
@@ -112,7 +112,7 @@ namespace ESLDCore
             }
         }
 
-        private void onFalse()
+        private void OnFalse()
         {
             if (hailer != null)
             {
@@ -121,17 +121,17 @@ namespace ESLDCore
         }
 
 
-        private void onGUIApplicationLauncherReady()
+        private void OnGUIApplicationLauncherReady()
         {
             if (this.button != null)
             {
-                killButton();
+                KillButton();
             }
             if (canHail)
             {
                 this.button = ApplicationLauncher.Instance.AddModApplication(
-                    this.onTrue,
-                    this.onFalse,
+                    this.OnTrue,
+                    this.OnFalse,
                     null,
                     null,
                     null,
@@ -141,17 +141,17 @@ namespace ESLDCore
             }
         }
 
-        public void onSceneChangeRequest(GameScenes _scene)
+        public void OnSceneChangeRequest(GameScenes _scene)
         {
-            killButton();
+            KillButton();
         }
 
-        public void onVesselChange(Vessel _vessel)
+        public void OnVesselChange(Vessel _vessel)
         {
-            killButton();
+            KillButton();
         }
 
-        private void killButton()
+        private void KillButton()
         {
             if (button != null && ApplicationLauncher.Instance != null)
             {
@@ -162,18 +162,18 @@ namespace ESLDCore
 
         void OnGameSceneLoadRequestedForAppLauncher(GameScenes SceneToLoad)
         {
-            killButton();
+            KillButton();
         }
 
         // Warp Effect
-        public void dazzle()
+        public void Dazzle()
         {
             userFOV = mainCam.FieldOfView;
             userDistance = mainCam.Distance;
             currentFOV = 180;
             currentDistance = 0.1f;
             isDazzling = true;
-            log.debug("Messing with camera!");
+            log.Debug("Messing with camera!");
         }
     }
 

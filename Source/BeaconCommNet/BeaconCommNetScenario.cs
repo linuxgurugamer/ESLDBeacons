@@ -10,12 +10,6 @@ namespace BeaconCommNet.CommNetLayer
     [KSPScenario(ScenarioCreationOptions.AddToAllGames, new GameScenes[] {GameScenes.FLIGHT, GameScenes.TRACKSTATION, GameScenes.EDITOR })]
     public class BeaconCommNetScenario : CommNetScenario
     {
-        /* Note:
-         * 1) On entering a desired scene, OnLoad() and then Start() are called.
-         * 2) On leaving the scene, OnSave() is called
-         * 3) GameScenes.SPACECENTER is recommended so that the constellation data can be verified and error-corrected in advance
-         */
-        
         internal CommNetNetwork CustomCommNetNetwork = null;
 
         public static new BeaconCommNetScenario Instance
@@ -26,7 +20,7 @@ namespace BeaconCommNet.CommNetLayer
 
         protected override void Start()
         {
-            BeaconCommNetScenario.Instance = this;
+            Instance = this;
 
             //Replace the CommNet network
             // Use CommNetManager's methods:
@@ -40,8 +34,8 @@ namespace BeaconCommNet.CommNetLayer
 
         private void OnDestroy()
         {
-            if (this.CustomCommNetNetwork != null)
-                UnityEngine.Object.Destroy(this.CustomCommNetNetwork);
+            if (CustomCommNetNetwork != null)
+                Destroy(CustomCommNetNetwork);
         }
     }
 }

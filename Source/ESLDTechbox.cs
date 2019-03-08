@@ -28,12 +28,12 @@ namespace ESLDCore
 
         Logger log = new Logger("ESLDCore:ESLDTechbox: ");
 
-        protected void forceUpdateTechboxes()
+        protected void ForceUpdateTechboxes()
         {
             if (vessel != null)
                 foreach (ESLDBeacon beacon in vessel.FindPartModulesImplementing<ESLDBeacon>())
                 {
-                    beacon.checkOwnTechBoxes();
+                    beacon.CheckOwnTechBoxes();
                 }
         }
 
@@ -44,13 +44,13 @@ namespace ESLDCore
             {
                 part.force_activate();
                 activated = true;
-                forceUpdateTechboxes();
+                ForceUpdateTechboxes();
                 techBoxStatus = techBoxModel + " Active.";
                 Events["TechBoxOn"].active = false;
                 Events["TechBoxOff"].active = !alwaysActive;
-                Actions["activateTBAction"].active = false;
-                Actions["deactivateTBAction"].active = !alwaysActive;
-                Actions["toggleTBAction"].active = !alwaysActive;
+                Actions["ActivateTBAction"].active = false;
+                Actions["DeactivateTBAction"].active = !alwaysActive;
+                Actions["ToggleTBAction"].active = !alwaysActive;
                 if (anim != null)
                 {
                     anim[animationName].normalizedSpeed = 1f;
@@ -58,7 +58,7 @@ namespace ESLDCore
                 }
             }
             else
-                log.warning("Can only activate when deactivated!");
+                log.Warning("Can only activate when deactivated!");
         }
         
         [KSPEvent(name = "TechBoxOff", active = false, guiActive = true, guiName = "Deactivate")]
@@ -67,12 +67,12 @@ namespace ESLDCore
             if (activated)
             {
                 activated = false;
-                forceUpdateTechboxes();
+                ForceUpdateTechboxes();
                 techBoxStatus = techBoxModel + " Inactive.";
                 Events["TechBoxOn"].active = true;
                 Events["TechBoxOff"].active = false;
-                Actions["activateTBAction"].active = true;
-                Actions["deactivateTBAction"].active = false;
+                Actions["ActivateTBAction"].active = true;
+                Actions["DeactivateTBAction"].active = false;
                 if (anim != null)
                 {
                     anim[animationName].normalizedSpeed = -1f;
@@ -80,11 +80,11 @@ namespace ESLDCore
                 }
             }
             else
-                log.warning("Can only deactivate when activated!");
+                log.Warning("Can only deactivate when activated!");
         }
 
         [KSPAction("Toggle TechBox")]
-        public void toggleTBAction(KSPActionParam param)
+        public void ToggleTBAction(KSPActionParam param)
         {
             if (activated)
                 TechBoxOff();
@@ -92,20 +92,20 @@ namespace ESLDCore
                 TechBoxOn();
         }
         [KSPAction("Activate TechBox")]
-        public void activateTBAction(KSPActionParam param)
+        public void ActivateTBAction(KSPActionParam param)
         {
             if (!activated)
                 TechBoxOn();
             else
-                log.warning("Can only activate when deactivated!");
+                log.Warning("Can only activate when deactivated!");
         }
         [KSPAction("Deactivate TechBox")]
-        public void deactivateTBAction(KSPActionParam param)
+        public void DeactivateTBAction(KSPActionParam param)
         {
             if (activated)
                 TechBoxOff();
             else
-                log.warning("Can only deactivate when activated!");
+                log.Warning("Can only deactivate when activated!");
         }
 
         public override void OnStart(StartState state)
@@ -114,10 +114,10 @@ namespace ESLDCore
             {
                 anim = part.FindModelAnimators(animationName).FirstOrDefault();
                 if (anim == null)
-                    log.warning("Animation not found! " + animationName);
+                    log.Warning("Animation not found! " + animationName);
                 else
                 {
-                    log.debug("Animation found: " + animationName);
+                    log.Debug("Animation found: " + animationName);
                     anim[animationName].wrapMode = WrapMode.Once;
                     if (activated)
                     {
@@ -137,21 +137,21 @@ namespace ESLDCore
             else if (activated)
             {
                 part.force_activate();
-                forceUpdateTechboxes();
+                ForceUpdateTechboxes();
                 techBoxStatus = techBoxModel + " Active.";
                 Events["TechBoxOn"].active = false;
                 Events["TechBoxOff"].active = !alwaysActive;
-                Actions["activateTBAction"].active = false;
-                Actions["deactivateTBAction"].active = !alwaysActive;
-                Actions["toggleTBAction"].active = !alwaysActive;
+                Actions["ActivateTBAction"].active = false;
+                Actions["DeactivateTBAction"].active = !alwaysActive;
+                Actions["ToggleTBAction"].active = !alwaysActive;
             }
             else if (!activated)
             {
                 techBoxStatus = techBoxModel + " Inactive.";
                 Events["TechBoxOn"].active = true;
                 Events["TechBoxOff"].active = false;
-                Actions["activateTBAction"].active = true;
-                Actions["deactivateTBAction"].active = false;
+                Actions["ActivateTBAction"].active = true;
+                Actions["DeactivateTBAction"].active = false;
             }
         }
 

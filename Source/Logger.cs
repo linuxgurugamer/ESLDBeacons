@@ -21,7 +21,7 @@ namespace ESLDCore
 {
     class Logger
     {
-        public string prefix
+        public string Prefix
         {
             get;
             set;
@@ -29,29 +29,29 @@ namespace ESLDCore
 
         public Logger(string prefix = "")
         {
-            this.prefix = prefix;
+            this.Prefix = prefix;
         }
 
-        public void debug(object message, UnityEngine.Object context = null)
+        public void Debug(object message, UnityEngine.Object context = null)
         {
 #if DEBUG
-            UnityEngine.Debug.Log(prefix + message, context);
+            UnityEngine.Debug.Log(Prefix + message, context);
 #endif
         }
 
-        public void info(object message, UnityEngine.Object context = null)
+        public void Info(object message, UnityEngine.Object context = null)
         {
-            UnityEngine.Debug.Log(prefix + message, context);
+            UnityEngine.Debug.Log(Prefix + message, context);
         }
 
-        public void warning(object message, UnityEngine.Object context = null)
+        public void Warning(object message, UnityEngine.Object context = null)
         {
-            UnityEngine.Debug.LogWarning(prefix + message, context);
+            UnityEngine.Debug.LogWarning(Prefix + message, context);
         }
 
-        public void error(object message, UnityEngine.Object context = null)
+        public void Error(object message, UnityEngine.Object context = null)
         {
-            UnityEngine.Debug.LogError(prefix + message, context);
+            UnityEngine.Debug.LogError(Prefix + message, context);
         }
     }
 }

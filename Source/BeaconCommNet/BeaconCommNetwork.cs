@@ -16,7 +16,7 @@ namespace BeaconCommNet.CommNetLayer
         Dictionary<CommNode, double> distanceOffsets = new Dictionary<CommNode, double>();
         public BeaconCommNetwork()
         {
-            this.realNet = CommNetManagerChecker.GetCommNetManagerInstance();
+            this.realNet = CommNetManagerChecker.GetCommNetManagerNetwork();
         }
         /// <summary>
         /// Edit the connectivity between two potential nodes
@@ -26,9 +26,8 @@ namespace BeaconCommNet.CommNetLayer
         protected override bool SetNodeConnection(CommNode a, CommNode b)
         {
             bool retValue = false;
-            Vessel aVessel, bVessel;
 
-            if (a.TryGetVessel(out aVessel) && b.TryGetVessel(out bVessel) && HasActiveBeacon(aVessel) && HasActiveBeacon(bVessel))
+            if (a.TryGetVessel(out Vessel aVessel) && b.TryGetVessel(out Vessel bVessel) && HasActiveBeacon(aVessel) && HasActiveBeacon(bVessel))
             {
                 if (a.distanceOffset != 0 && !distanceOffsets.ContainsKey(a))
                     distanceOffsets.Add(a, a.distanceOffset);
@@ -49,14 +48,13 @@ namespace BeaconCommNet.CommNetLayer
             bool baseValue = true;
             if (!CommNetManagerChecker.CommNetManagerInstalled)
                 baseValue = base.TryConnect(a, b, distance, aCanRelay, bCanRelay, bothRelay);
-            Vessel aVessel, bVessel;
 
-            if (a.TryGetVessel(out aVessel) && b.TryGetVessel(out bVessel) && HasActiveBeacon(aVessel) && HasActiveBeacon(bVessel))
+            if (a.TryGetVessel(out Vessel aVessel) && b.TryGetVessel(out Vessel bVessel) && HasActiveBeacon(aVessel) && HasActiveBeacon(bVessel))
             {
                 if (distanceOffsets.TryGetValue(a, out a.distanceOffset))
                 {
                     distanceOffsets.Remove(a);
-                    if(a.distanceOffset==double.NegativeInfinity)
+                    if (a.distanceOffset == double.NegativeInfinity)
                     {
                         UnityEngine.Debug.LogWarning("ESLDBeaconCommNet: Somehow got a negInf. Setting to zero.");
                         a.distanceOffset = 0;
