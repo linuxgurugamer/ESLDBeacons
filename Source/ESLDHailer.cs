@@ -30,11 +30,14 @@ namespace ESLDCore
         public List<Vessel> farTargets = new List<Vessel>();
         public Dictionary<ESLDBeacon, string> nearBeacons = new Dictionary<ESLDBeacon, string>();
         public double precision;
-        public OrbitDriver oPredictDriver = null;
-        public OrbitRenderer oPredict = null;
-        public Transform oOrigin = null;
-        public LineRenderer oDirection = null;
-        public GameObject oDirObj = null;
+        public GameObject predictionGameObject = null;
+        public OrbitDriver predictionOrbitDriver = null;
+        public OrbitRenderer predictionOrbitRenderer = null;
+        PatchedConicSolver predictionPatchedConicSolver;
+        PatchedConicRenderer predictionPatchedConicRenderer;
+        bool predictionsDrawn = false;
+        //public Transform oOrigin = null;
+        //public LineRenderer oDirection = null;
         public double lastRemDist;
         public bool wasInMapView;
         public bool nbWasUserSelected = false;
@@ -46,6 +49,14 @@ namespace ESLDCore
         bool drawConfirmOn = false;
         bool drawGUIOn = false;
         Logger log = new Logger("ESLDCore:ESLDHailer: ");
+
+        public static GUIStyle buttonNeutral;
+        public static GUIStyle labelHasFuel;
+        public static GUIStyle labelNoFuel;
+
+        public static GUIStyle buttonHasFuel;
+        public static GUIStyle buttonNoFuel;
+        public static GUIStyle buttonNoPath;
 
         // GUI Open?
         [KSPField(guiName = "GUIOpen", isPersistant = true, guiActive = false)]
@@ -224,25 +235,6 @@ namespace ESLDCore
         private void BeaconInterface(int GuiId)
         {
             if (!vessel.isActiveVessel) HailerGUIClose();
-            GUIStyle buttonHasFuel = new GUIStyle(GUI.skin.button);
-            buttonHasFuel.padding = new RectOffset(8, 8, 8, 8);
-            buttonHasFuel.normal.textColor = buttonHasFuel.focused.textColor = Color.green;
-            buttonHasFuel.hover.textColor = buttonHasFuel.active.textColor = Color.white;
-
-            GUIStyle buttonNoFuel = new GUIStyle(GUI.skin.button);
-            buttonNoFuel.padding = new RectOffset(8, 8, 8, 8);
-            buttonNoFuel.normal.textColor = buttonNoFuel.focused.textColor = Color.red;
-            buttonNoFuel.hover.textColor = buttonNoFuel.active.textColor = Color.yellow;
-
-            GUIStyle buttonNoPath = new GUIStyle(GUI.skin.button);
-            buttonNoPath.padding = new RectOffset(8, 8, 8, 8);
-            buttonNoPath.normal.textColor = buttonNoFuel.focused.textColor = Color.gray;
-            buttonNoPath.hover.textColor = buttonNoFuel.active.textColor = Color.gray;
-
-            GUIStyle buttonNeutral = new GUIStyle(GUI.skin.button);
-            buttonNeutral.padding = new RectOffset(8, 8, 8, 8);
-            buttonNeutral.normal.textColor = buttonNoFuel.focused.textColor = Color.white;
-            buttonNeutral.hover.textColor = buttonNoFuel.active.textColor = Color.white;
 
             GUILayout.BeginVertical(HighLogic.Skin.scrollView);
             if (farTargets.Count() < 1 || nearBeacon == null)
@@ -319,8 +311,8 @@ namespace ESLDCore
                         if (fuelstate == buttonHasFuel)
                         {
                             farBeaconVessel = farTargetVessel;
-                            drawConfirm();
-                            if (!nearBeacon.hasAMU) showExitOrbit(vessel, farTargetVessel);
+                            //DrawConfirm();
+                            if (!nearBeacon.hasAMU) ShowExitOrbit(vessel, farTargetVessel);
                             //RenderingManager.AddToPostDrawQueue(4, new Callback(drawConfirm));
                             drawConfirmOn = true;
                             //RenderingManager.RemoveFromPostDrawQueue(3, new Callback(drawGUI));
@@ -373,19 +365,50 @@ namespace ESLDCore
 
         }
 
-        private void ConfirmInterface(int GuiID) // Second beacon interface window.  
+        public void Update()
         {
+            UpdateExitOrbit(vessel, farBeaconVessel);
+        }
 
-            GUIStyle buttonNeutral = new GUIStyle(GUI.skin.button);
+        public void OnDestroy()
+        {
+            Destroy(predictionGameObject);
+        }
+
+        private static void SetupStyles()
+        {
+            if (buttonNeutral != null)
+                return;
+
+            buttonNeutral = new GUIStyle(GUI.skin.button);
             buttonNeutral.padding = new RectOffset(8, 8, 8, 8);
             buttonNeutral.normal.textColor = buttonNeutral.focused.textColor = Color.white;
             buttonNeutral.hover.textColor = buttonNeutral.active.textColor = Color.white;
 
-            GUIStyle labelHasFuel = new GUIStyle(GUI.skin.label);
+            labelHasFuel = new GUIStyle(GUI.skin.label);
             labelHasFuel.normal.textColor = Color.green;
 
-            GUIStyle labelNoFuel = new GUIStyle(GUI.skin.label);
+            labelNoFuel = new GUIStyle(GUI.skin.label);
             labelNoFuel.normal.textColor = Color.red;
+
+            buttonHasFuel = new GUIStyle(GUI.skin.button);
+            buttonHasFuel.padding = new RectOffset(8, 8, 8, 8);
+            buttonHasFuel.normal.textColor = buttonHasFuel.focused.textColor = Color.green;
+            buttonHasFuel.hover.textColor = buttonHasFuel.active.textColor = Color.white;
+
+            buttonNoFuel = new GUIStyle(GUI.skin.button);
+            buttonNoFuel.padding = new RectOffset(8, 8, 8, 8);
+            buttonNoFuel.normal.textColor = buttonNoFuel.focused.textColor = Color.red;
+            buttonNoFuel.hover.textColor = buttonNoFuel.active.textColor = Color.yellow;
+
+            buttonNoPath = new GUIStyle(GUI.skin.button);
+            buttonNoPath.padding = new RectOffset(8, 8, 8, 8);
+            buttonNoPath.normal.textColor = buttonNoFuel.focused.textColor = Color.gray;
+            buttonNoPath.hover.textColor = buttonNoFuel.active.textColor = Color.gray;
+        }
+
+        private void ConfirmInterface(int GuiID) // Second beacon interface window.  
+        {
             GUILayout.BeginVertical(HighLogic.Skin.scrollView);
             if (nearBeacon != null)
             {
@@ -483,7 +506,7 @@ namespace ESLDCore
                 double retTripCost = 0;
                 bool fuelcheck = false;
                 bool affordReturn = true;
-                ESLDBeacon cheapFarBeacon = new ESLDBeacon();
+                ESLDBeacon cheapFarBeacon = beaconsOnFarBeaconVessel[0];
                 foreach (ESLDBeacon tempFarBeacon in beaconsOnFarBeaconVessel)
                 {
                     if (retTripCost == 0)
@@ -562,13 +585,13 @@ namespace ESLDCore
                     tempLabel += " (base cost) for return trip using active beacons.";
                     GUILayout.Label(tempLabel, labelNoFuel);
                 }
-                if (oPredict != null) updateExitOrbit(vessel, farBeaconVessel);
+                //UpdateExitOrbit(vessel, farBeaconVessel); //Moved to Update()
                 if (GUILayout.Button("Confirm and Warp", buttonNeutral))
                 {
                     //RenderingManager.RemoveFromPostDrawQueue(4, new Callback(drawConfirm));
                     drawConfirmOn = false;
                     HailerGUIClose();
-                    if (oPredict != null) hideExitOrbit(oPredict);
+                    HideExitOrbit();
                     // Check transfer path one last time.
                     KeyValuePair<string, CelestialBody> checkpath = HasTransferPath(nbparent, farBeaconVessel, nearBeacon.gLimitEff); // One more check for a clear path in case they left the window open too long.
                     bool finalPathCheck = false;
@@ -697,20 +720,20 @@ namespace ESLDCore
             }
             else
             {
-                if (oPredict != null) hideExitOrbit(oPredict);
+                HideExitOrbit();
             }
             if (!vessel.isActiveVessel)
             {
                 //RenderingManager.RemoveFromPostDrawQueue(4, new Callback(drawConfirm));
                 drawConfirmOn = false;
-                if (oPredict != null) hideExitOrbit(oPredict);
+                HideExitOrbit();
             }
             if (GUILayout.Button("Back", buttonNeutral))
             {
                 //RenderingManager.RemoveFromPostDrawQueue(4, new Callback(drawConfirm));
                 drawConfirmOn = false;
                 HailerGUIOpen();
-                if (oPredict != null) hideExitOrbit(oPredict);
+                HideExitOrbit();
             }
             GUILayout.EndVertical();
             GUI.DragWindow(new Rect(0, 0, 10000, 20));
@@ -718,15 +741,17 @@ namespace ESLDCore
 
         private void OnGUI()
         {
+            if (drawGUIOn || drawConfirmOn)
+                SetupStyles();
             if (drawGUIOn)
-                drawGUI();
+                DrawGUI();
             if (drawConfirmOn)
-                drawConfirm();
-            if (!drawGUIOn && !drawConfirmOn)
+                DrawConfirm();
+            if (!drawGUIOn && !drawConfirmOn && farTargets.Count > 0)
                 farTargets.Clear();
         }
 
-        private void drawGUI()
+        private void DrawGUI()
         {
             if (farTargets.Count() == 0)
                 ListFarBeacons();
@@ -737,7 +762,7 @@ namespace ESLDCore
             }
         }
 
-        private void drawConfirm()
+        private void DrawConfirm()
         {
             ConfirmWindow = GUILayout.Window(2, ConfirmWindow, ConfirmInterface, "Pre-Warp Confirmation", GUILayout.MinWidth(400), GUILayout.MinHeight(200));
             if ((ConfirmWindow.x == 0) && (ConfirmWindow.y == 0))
@@ -777,7 +802,7 @@ namespace ESLDCore
         public void HailerDeactivate()
         {
             isActive = false;
-            if (oPredict != null) hideExitOrbit(oPredict);
+            HideExitOrbit();
             HailerGUIClose();
             //RenderingManager.RemoveFromPostDrawQueue(4, new Callback(drawConfirm));
             drawConfirmOn = false;
@@ -850,13 +875,13 @@ namespace ESLDCore
         }
 
         // Show exit orbital predictions
-        private void showExitOrbit(Vessel near, Vessel far)
+        private void ShowExitOrbit(Vessel nearObject, Vessel farObject)
         {
             // Recenter map, save previous state.
             wasInMapView = MapView.MapIsEnabled;
             if (!MapView.MapIsEnabled) MapView.EnterMapView();
-            MapObject farTarget = findVesselBody(far);
             log.Debug("Finding target.");
+            MapObject farTarget = FindVesselBody(farObject);
             if (farTarget != null) MapView.MapCamera.SetTarget(farTarget);
             Vector3 mapCamPos = ScaledSpace.ScaledToLocalSpace(MapView.MapCamera.transform.position);
             Vector3 farTarPos = ScaledSpace.ScaledToLocalSpace(farTarget.transform.position);
@@ -864,35 +889,59 @@ namespace ESLDCore
             log.Debug("Initializing, camera distance is " + dirScalar);
 
             // Initialize projection stuff.
-            Vector3d exitTraj = getJumpVelOffset(near, far, nearBeacon);
-            oPredictDriver = new OrbitDriver();
-            oPredictDriver.orbit = new Orbit();
-            oPredictDriver.orbit.referenceBody = far.mainBody;
-            oPredictDriver.referenceBody = far.mainBody;
-            oPredictDriver.upperCamVsSmaRatio = 999999;  // Took forever to figure this out - this sets at what zoom level the orbit appears.  Was causing it not to appear at small bodies.
-            oPredictDriver.lowerCamVsSmaRatio = 0.0001f;
-            oPredictDriver.orbit.UpdateFromStateVectors(far.orbit.pos, exitTraj, far.mainBody, Planetarium.GetUniversalTime());
-            oPredictDriver.orbit.Init();
-            Vector3d p = oPredictDriver.orbit.getRelativePositionAtUT(Planetarium.GetUniversalTime());
-            Vector3d v = oPredictDriver.orbit.getOrbitalVelocityAtUT(Planetarium.GetUniversalTime());
-            oPredictDriver.orbit.h = Vector3d.Cross(p, v);
-            oPredict = MapView.MapCamera.gameObject.AddComponent<OrbitRenderer>();
-            oPredict.upperCamVsSmaRatio = 999999;
-            oPredict.lowerCamVsSmaRatio = 0.0001f;
-            oPredict.celestialBody = far.mainBody;
-            oPredict.driver = oPredictDriver;
-            oPredictDriver.Renderer = oPredict;
+            if (!IsPatchedConicsAvailable)
+            {
+                HideExitOrbit();
+                return;
+            }
+            predictionsDrawn = true;
 
             log.Debug("Beginning orbital projection.");
+            Vector3d exitTraj = GetJumpVelOffset(nearObject, farObject, nearBeacon);
+            if (predictionGameObject != null) Destroy(predictionGameObject);
+            predictionGameObject = new GameObject("OrbitRendererGameObject");
+            predictionOrbitDriver = predictionGameObject.AddComponent<OrbitDriver>();
+            predictionOrbitDriver.orbit.referenceBody = farObject.mainBody;
+            predictionOrbitDriver.orbit = new Orbit();
+            predictionOrbitDriver.referenceBody = farObject.mainBody;
+            predictionOrbitDriver.upperCamVsSmaRatio = 999999;  // Took forever to figure this out - this sets at what zoom level the orbit appears.  Was causing it not to appear at small bodies.
+            predictionOrbitDriver.lowerCamVsSmaRatio = 0.0001f;
+            predictionOrbitDriver.orbit.UpdateFromStateVectors(farObject.orbit.pos, exitTraj, farObject.mainBody, Planetarium.GetUniversalTime());
+            predictionOrbitDriver.orbit.Init();
+            Vector3d p = predictionOrbitDriver.orbit.getRelativePositionAtUT(Planetarium.GetUniversalTime());
+            Vector3d v = predictionOrbitDriver.orbit.getOrbitalVelocityAtUT(Planetarium.GetUniversalTime());
+            predictionOrbitDriver.orbit.h = Vector3d.Cross(p, v);
+            predictionOrbitDriver.updateMode = OrbitDriver.UpdateMode.TRACK_Phys;
+            predictionOrbitDriver.orbitColor = Color.red;
             log.Debug("Displaying orbital projection.");
+            predictionOrbitRenderer = predictionGameObject.AddComponent<OrbitRenderer>();
+            predictionOrbitRenderer.SetColor(Color.red);
+            predictionOrbitRenderer.vessel = this.vessel;
+            predictionOrbitDriver.vessel = this.vessel;
+            predictionOrbitRenderer.upperCamVsSmaRatio = 999999;
+            predictionOrbitRenderer.lowerCamVsSmaRatio = 0.0001f;
+            predictionOrbitRenderer.celestialBody = farObject.mainBody;
+            predictionOrbitRenderer.driver = predictionOrbitDriver;
+            predictionOrbitDriver.Renderer = predictionOrbitRenderer;
+
+            if (true)
+            {
+                // This draws the full Patched Conics prediction.
+                predictionPatchedConicSolver = predictionGameObject.AddComponent<PatchedConicSolver>();
+                predictionPatchedConicRenderer = predictionGameObject.AddComponent<PatchedConicRenderer>();
+                predictionOrbitRenderer.drawIcons = OrbitRendererBase.DrawIcons.NONE;
+                predictionOrbitRenderer.drawMode = OrbitRendererBase.DrawMode.OFF;
+            }
+            else
+            {
+                // This draws just the first patch, similar to a Level 1 tracking station.
+                predictionOrbitRenderer.driver.drawOrbit = true;
+                predictionOrbitRenderer.drawIcons = OrbitRenderer.DrawIcons.OBJ_PE_AP;
+                predictionOrbitRenderer.drawMode = OrbitRenderer.DrawMode.REDRAW_AND_RECALCULATE;
+                predictionOrbitRenderer.enabled = true;
+            }
+            this.StartCoroutine(NullOrbitDriverVessels());
             // Splash some color on it.
-            oPredict.driver.drawOrbit = true;
-            oPredict.driver.orbitColor = Color.red;
-            oPredict.orbitColor = Color.red;
-            oPredict.drawIcons = OrbitRenderer.DrawIcons.OBJ_PE_AP;
-            oPredict.drawMode = OrbitRenderer.DrawMode.REDRAW_AND_RECALCULATE;
-            //oPredict.DrawOrbit(OrbitRenderer.DrawMode.REDRAW_AND_RECALCULATE);
-            oPredict.enabled = true;
 
             // Directional indicator.
             /*
@@ -931,21 +980,49 @@ namespace ESLDCore
              */
         }
 
+        public System.Collections.IEnumerator NullOrbitDriverVessels()
+        {
+            // Initially tried letting it keep this vessel, but things flicker.
+            // Then, tried it as null all the time, but it throws a NullRef in PatchedConicRenderer.Start()
+            // But, once PCR is initialized, it's all good to set the OrbitDriver.vessel to null.
+            if (predictionPatchedConicRenderer.relativeTo == null)
+                yield return new WaitForEndOfFrame();
+            while (predictionPatchedConicRenderer.relativeTo == null)
+            {
+                if (!HighLogic.LoadedSceneIsFlight)
+                {
+                    log.Debug("Scene changed, breaking Coroutine.");
+                    yield break;
+                }
+                yield return null;
+            }
+            predictionOrbitRenderer.vessel = null;
+            predictionOrbitDriver.vessel = null;
+        }
 
         // Update said predictions
-        private void updateExitOrbit(Vessel near, Vessel far)
+        private void UpdateExitOrbit(Vessel nearObject, Vessel farObject)
         {
+            if (!predictionsDrawn)
+                return;
+            if (!IsPatchedConicsAvailable)
+            {
+                HideExitOrbit();
+                return;
+            }
+
             // Orbit prediction is broken for now FIXME!!
             Vector3 mapCamPos = ScaledSpace.ScaledToLocalSpace(MapView.MapCamera.transform.position);
             MapObject farTarget = MapView.MapCamera.target;
             Vector3 farTarPos = ScaledSpace.ScaledToLocalSpace(farTarget.transform.position);
             float dirScalar = Vector3.Distance(mapCamPos, farTarPos);
-            Vector3d exitTraj = getJumpVelOffset(near, far, nearBeacon);
-            oPredict.driver.referenceBody = far.mainBody;
-            oPredict.driver.orbit.referenceBody = far.mainBody;
-            oPredict.driver.pos = far.orbit.pos;
-            oPredict.celestialBody = far.mainBody;
-            oPredictDriver.orbit.UpdateFromStateVectors(far.orbit.pos, exitTraj, far.mainBody, Planetarium.GetUniversalTime());
+            Vector3d exitTraj = GetJumpVelOffset(nearObject, farObject, nearBeacon);
+            predictionOrbitRenderer.driver.referenceBody = farObject.mainBody;
+            predictionOrbitRenderer.driver.orbit.referenceBody = farObject.mainBody;
+            predictionOrbitRenderer.driver.pos = farObject.orbit.pos;
+            predictionOrbitRenderer.celestialBody = farObject.mainBody;
+            predictionOrbitRenderer.SetColor(Color.red);
+            predictionOrbitDriver.orbit.UpdateFromStateVectors(farObject.orbit.pos, exitTraj, farObject.mainBody, Planetarium.GetUniversalTime());
 
             /* Direction indicator is broken/not required
             float baseWidth = 20.0f;
@@ -963,12 +1040,21 @@ namespace ESLDCore
         }
 
         // Back out of orbital predictions.
-        private void hideExitOrbit(OrbitRenderer showOrbit)
+        private void HideExitOrbit()
         {
+            MapView.MapCamera.SetTarget(MapView.MapCamera.targets.Find((MapObject mobj) => mobj.vessel != null && mobj.vessel.GetInstanceID() == FlightGlobals.ActiveVessel.GetInstanceID()));
+            if (MapView.MapIsEnabled && !wasInMapView) MapView.ExitMapView();
+            wasInMapView = true;    // Not really, but this stops it from trying to force it if the user enters again.
+
+            if (!predictionsDrawn)
+                return;
             // Orbit prediction is broken for now FIXME!!
-            showOrbit.drawMode = OrbitRenderer.DrawMode.OFF;
-            showOrbit.driver.drawOrbit = false;
-            showOrbit.drawIcons = OrbitRenderer.DrawIcons.NONE;
+            predictionOrbitRenderer.drawMode = OrbitRenderer.DrawMode.OFF;
+            predictionOrbitRenderer.driver.drawOrbit = false;
+            predictionOrbitRenderer.drawIcons = OrbitRenderer.DrawIcons.NONE;
+            Destroy(predictionGameObject);
+            predictionGameObject = null;
+            predictionsDrawn = false;
 
             //Direction indicator is broken/not required
             //oDirection.enabled = false;
@@ -981,8 +1067,21 @@ namespace ESLDCore
                     MapView.MapCamera.SetTarget(mobj);
                 }
             }*/
-            MapView.MapCamera.SetTarget(MapView.MapCamera.targets.Find((MapObject mobj) => mobj.vessel!=null && mobj.vessel.GetInstanceID() == FlightGlobals.ActiveVessel.GetInstanceID()));
-            if (MapView.MapIsEnabled && !wasInMapView) MapView.ExitMapView();
+        }
+
+        /// <summary> Check if patched conics are available in the current save. </summary>
+        /// <returns>True if patched conics are available</returns>
+        public static bool IsPatchedConicsAvailable
+        {
+            get
+            {
+                // Get our level of tracking station
+                float trackingstation_level = ScenarioUpgradeableFacilities.GetFacilityLevel(SpaceCenterFacility.TrackingStation);
+
+                // Check if the tracking station knows Patched Conics
+                return GameVariables.Instance.GetOrbitDisplayMode(trackingstation_level).CompareTo(
+                        GameVariables.OrbitDisplayMode.PatchedConics) >= 0;
+            }
         }
 
         // Mapview Utility
