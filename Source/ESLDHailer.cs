@@ -590,117 +590,10 @@ namespace ESLDCore
                     KeyValuePair<string, CelestialBody> checkpath = HasTransferPath(nbparent, farBeaconVessel, nearBeacon.gLimitEff); // One more check for a clear path in case they left the window open too long.
                     bool finalPathCheck = false;
                     if (checkpath.Key == "OK") finalPathCheck = true;
-                    // Check fuel one last time.
-                    fuelcheck = nearBeacon.jumpResources.All((ESLDJumpResource Jresource) =>
-                        nearBeacon.RequireResource(nbparent, Jresource.resID, tripcost * Jresource.ratio, false));
-                    if (fuelcheck && finalPathCheck) // Fuel is valid for and path is clear.
-                    {
-                        // Pay fuel
-                        foreach (ESLDJumpResource Jresource in nearBeacon.jumpResources)
-                            nearBeacon.RequireResource(nbparent, Jresource.resID, tripcost * Jresource.ratio, true);
-                        // Buckle up!
-                        if (!nearBeacon.hasHCU) // Penalize for HCU not being present/online.
-                        {
-                            List<ProtoCrewMember> crewList = new List<ProtoCrewMember>();
-                            List<Part> crewParts = new List<Part>();
-                            foreach (Part vpart in vessel.Parts)
-                            {
-                                foreach (ProtoCrewMember crew in vpart.protoModuleCrew)
-                                {
-                                    crewParts.Add(vpart);
-                                    crewList.Add(crew);
-                                }
-                            }
-                            for (int i = crewList.Count - 1; i >= 0; i--)
-                            {
-                                if (i >= crewList.Count)
-                                {
-                                    if (crewList.Count == 0) break;
-                                    i = crewList.Count - 1;
-                                }
-                                ProtoCrewMember tempCrew = crewList[i];
-                                crewList.RemoveAt(i);
-                                ScreenMessages.PostScreenMessage(tempCrew.name + " was killed in transit!", 5.0f, ScreenMessageStyle.UPPER_CENTER);
-                                crewParts[i].RemoveCrewmember(tempCrew);
-                                crewParts.RemoveAt(i);
-                                tempCrew.Die();
-                            }
-                            HCUParts = GetHCUParts(vessel);
-                            List<Part> HCUList = new List<Part>();
-                            HCUList.AddRange(HCUParts.Keys);
-                            HCUParts.Clear();
-                            for (int i = HCUList.Count - 1; i >= 0; i--)
-                            {
-                                if (i >= HCUList.Count)
-                                {
-                                    if (HCUList.Count == 0) break;
-                                    i = HCUList.Count - 1;
-                                }
-                                Part tempPart = HCUList[i];
-                                HCUList.RemoveAt(i);
-                                tempPart.explosionPotential = 1;
-                                tempPart.explode();
-                                tempPart.Die();
-                            }
-                        }
-                        hailerButton.Dazzle();
-                        Vector3d transferVelOffset = GetJumpVelOffset(vessel, farBeaconVessel, nearBeacon);
-                        if (nearBeacon.hasAMU) transferVelOffset = farBeaconVessel.orbit.vel;
-                        Vector3d spread = ((UnityEngine.Random.onUnitSphere + UnityEngine.Random.insideUnitSphere) / 2) * (float)precision;
-                        // Making the spread less likely to throw you outside the SoI of the body.
-                        if ((farBeaconVessel.orbit.pos + spread).magnitude > farBeaconVessel.mainBody.sphereOfInfluence)
-                            spread = -spread;   // Negative random is equally random.
-
-                        OrbitDriver vesOrb = vessel.orbitDriver;
-                        Orbit orbit = vesOrb.orbit;
-                        Orbit newOrbit = new Orbit(orbit.inclination, orbit.eccentricity, orbit.semiMajorAxis, orbit.LAN, orbit.argumentOfPeriapsis, orbit.meanAnomalyAtEpoch, orbit.epoch, orbit.referenceBody);
-                        newOrbit.UpdateFromStateVectors (farBeaconVessel.orbit.pos + spread, transferVelOffset, farBeaconVessel.mainBody, Planetarium.GetUniversalTime ());
-                        vessel.Landed = false;
-                        vessel.Splashed = false;
-                        vessel.landedAt = string.Empty;
-
-                        OrbitPhysicsManager.HoldVesselUnpack(60);
-
-                        List<Vessel> allVessels = FlightGlobals.Vessels;
-                        foreach (Vessel v in allVessels.AsEnumerable()) {
-                            if (v.packed == false)
-                                v.GoOnRails ();
-                        }
-
-                        CelestialBody oldBody = vessel.orbitDriver.orbit.referenceBody;
-
-                        orbit.inclination = newOrbit.inclination;
-                        orbit.eccentricity = newOrbit.eccentricity;
-                        orbit.semiMajorAxis = newOrbit.semiMajorAxis;
-                        orbit.LAN = newOrbit.LAN;
-                        orbit.argumentOfPeriapsis = newOrbit.argumentOfPeriapsis;
-                        orbit.meanAnomalyAtEpoch = newOrbit.meanAnomalyAtEpoch;
-                        orbit.epoch = newOrbit.epoch;
-                        orbit.referenceBody = newOrbit.referenceBody;
-                        orbit.Init();
-                        orbit.UpdateFromUT(Planetarium.GetUniversalTime());
-                        if (orbit.referenceBody != newOrbit.referenceBody)
-                            vesOrb.OnReferenceBodyChange?.Invoke (newOrbit.referenceBody);
-
-                        vessel.orbitDriver.pos = vessel.orbit.pos.xzy;
-                        vessel.orbitDriver.vel = vessel.orbit.vel;
-
-                        if (vessel.orbitDriver.orbit.referenceBody != oldBody)
-                            GameEvents.onVesselSOIChanged.Fire (new GameEvents.HostedFromToAction<Vessel, CelestialBody> (vessel, oldBody, vessel.orbitDriver.orbit.referenceBody));
-                        ListFarBeacons();
-                    }
-                    else if (!fuelcheck && finalPathCheck)
-                    {
-                        ScreenMessages.PostScreenMessage("Jump failed!  Origin beacon did not have enough fuel to execute transfer.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
-                    }
-                    else if (!finalPathCheck)
-                    {
+                    if (!finalPathCheck)
                         ScreenMessages.PostScreenMessage("Jump Failed!  Transfer path has become obstructed.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
-                    }
                     else
-                    {
-                        ScreenMessages.PostScreenMessage("Jump Failed!  Origin beacon cannot complete transfer.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
-                    }
+                        Warp(nbparent, tripcost, HCUParts);
                 }
             }
             else
@@ -720,6 +613,113 @@ namespace ESLDCore
             }
             GUILayout.EndVertical();
             GUI.DragWindow(new Rect(0, 0, 10000, 20));
+        }
+
+        private void Warp(Vessel nbparent, double tripcost, Dictionary<Part, string> HCUParts)
+        {
+            // Check fuel one last time.
+            bool fuelcheck = nearBeacon.jumpResources.All((ESLDJumpResource Jresource) =>
+                nearBeacon.RequireResource(nbparent, Jresource.resID, tripcost * Jresource.ratio, false));
+            if (fuelcheck) // Fuel is valid for and path is clear.
+            {
+                // Pay fuel
+                foreach (ESLDJumpResource Jresource in nearBeacon.jumpResources)
+                    nearBeacon.RequireResource(nbparent, Jresource.resID, tripcost * Jresource.ratio, true);
+                // Buckle up!
+                if (!nearBeacon.hasHCU) // Penalize for HCU not being present/online.
+                {
+                    List<ProtoCrewMember> crewList = new List<ProtoCrewMember>();
+                    List<Part> crewParts = new List<Part>();
+                    foreach (Part vpart in vessel.Parts)
+                    {
+                        foreach (ProtoCrewMember crew in vpart.protoModuleCrew)
+                        {
+                            crewParts.Add(vpart);
+                            crewList.Add(crew);
+                        }
+                    }
+                    for (int i = crewList.Count - 1; i >= 0; i--)
+                    {
+                        if (i >= crewList.Count)
+                        {
+                            if (crewList.Count == 0) break;
+                            i = crewList.Count - 1;
+                        }
+                        ProtoCrewMember tempCrew = crewList[i];
+                        crewList.RemoveAt(i);
+                        ScreenMessages.PostScreenMessage(tempCrew.name + " was killed in transit!", 5.0f, ScreenMessageStyle.UPPER_CENTER);
+                        crewParts[i].RemoveCrewmember(tempCrew);
+                        crewParts.RemoveAt(i);
+                        tempCrew.Die();
+                    }
+                    List<Part> HCUList = new List<Part>();
+                    HCUList.AddRange(HCUParts.Keys);
+                    for (int i = HCUList.Count - 1; i >= 0; i--)
+                    {
+                        if (i >= HCUList.Count)
+                        {
+                            if (HCUList.Count == 0) break;
+                            i = HCUList.Count - 1;
+                        }
+                        Part tempPart = HCUList[i];
+                        HCUList.RemoveAt(i);
+                        tempPart.explosionPotential = 1;
+                        tempPart.explode();
+                        tempPart.Die();
+                    }
+                }
+                hailerButton.Dazzle();
+                Vector3d transferVelOffset = GetJumpVelOffset(vessel, farBeaconVessel, nearBeacon);
+                if (nearBeacon.hasAMU) transferVelOffset = farBeaconVessel.orbit.vel;
+                Vector3d spread = ((UnityEngine.Random.onUnitSphere + UnityEngine.Random.insideUnitSphere) / 2) * (float)precision;
+                // Making the spread less likely to throw you outside the SoI of the body.
+                if ((farBeaconVessel.orbit.pos + spread).magnitude > farBeaconVessel.mainBody.sphereOfInfluence)
+                    spread = -spread;   // Negative random is equally random.
+
+                OrbitDriver vesOrb = vessel.orbitDriver;
+                Orbit orbit = vesOrb.orbit;
+                Orbit newOrbit = new Orbit(orbit.inclination, orbit.eccentricity, orbit.semiMajorAxis, orbit.LAN, orbit.argumentOfPeriapsis, orbit.meanAnomalyAtEpoch, orbit.epoch, orbit.referenceBody);
+                newOrbit.UpdateFromStateVectors(farBeaconVessel.orbit.pos + spread, transferVelOffset, farBeaconVessel.mainBody, Planetarium.GetUniversalTime());
+                vessel.Landed = false;
+                vessel.Splashed = false;
+                vessel.landedAt = string.Empty;
+
+                OrbitPhysicsManager.HoldVesselUnpack(60);
+
+                List<Vessel> allVessels = FlightGlobals.Vessels;
+                foreach (Vessel v in allVessels.AsEnumerable())
+                {
+                    if (v.packed == false)
+                        v.GoOnRails();
+                }
+
+                CelestialBody oldBody = vessel.orbitDriver.orbit.referenceBody;
+
+                orbit.inclination = newOrbit.inclination;
+                orbit.eccentricity = newOrbit.eccentricity;
+                orbit.semiMajorAxis = newOrbit.semiMajorAxis;
+                orbit.LAN = newOrbit.LAN;
+                orbit.argumentOfPeriapsis = newOrbit.argumentOfPeriapsis;
+                orbit.meanAnomalyAtEpoch = newOrbit.meanAnomalyAtEpoch;
+                orbit.epoch = newOrbit.epoch;
+                orbit.referenceBody = newOrbit.referenceBody;
+                orbit.Init();
+                orbit.UpdateFromUT(Planetarium.GetUniversalTime());
+                if (orbit.referenceBody != newOrbit.referenceBody)
+                    vesOrb.OnReferenceBodyChange?.Invoke(newOrbit.referenceBody);
+
+                vessel.orbitDriver.pos = vessel.orbit.pos.xzy;
+                vessel.orbitDriver.vel = vessel.orbit.vel;
+
+                if (vessel.orbitDriver.orbit.referenceBody != oldBody)
+                    GameEvents.onVesselSOIChanged.Fire(new GameEvents.HostedFromToAction<Vessel, CelestialBody>(vessel, oldBody, vessel.orbitDriver.orbit.referenceBody));
+
+                ListFarBeacons();
+            }
+            else
+            {
+                ScreenMessages.PostScreenMessage("Jump failed!  Origin beacon did not have enough fuel to execute transfer.", 5.0f, ScreenMessageStyle.UPPER_CENTER);
+            }
         }
 
         private void OnGUI()
