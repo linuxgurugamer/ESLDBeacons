@@ -30,11 +30,10 @@ namespace ESLDCore
 
         protected void ForceUpdateTechboxes()
         {
-            if (vessel != null)
-                foreach (ESLDBeacon beacon in vessel.FindPartModulesImplementing<ESLDBeacon>())
-                {
-                    beacon.CheckOwnTechBoxes();
-                }
+            foreach (ESLDBeacon beacon in vessel.FindPartModulesImplementing<ESLDBeacon>())
+            {
+                beacon.CheckOwnTechBoxes();
+            }
         }
 
         [KSPEvent(name = "TechBoxOn", active = true, guiActive = true, guiName = "Activate")]
@@ -45,17 +44,8 @@ namespace ESLDCore
                 part.force_activate();
                 activated = true;
                 ForceUpdateTechboxes();
-                techBoxStatus = techBoxModel + " Active.";
-                Events["TechBoxOn"].active = false;
-                Events["TechBoxOff"].active = !alwaysActive;
-                Actions["ActivateTBAction"].active = false;
-                Actions["DeactivateTBAction"].active = !alwaysActive;
-                Actions["ToggleTBAction"].active = !alwaysActive;
-                if (anim != null)
-                {
-                    anim[animationName].normalizedSpeed = 1f;
-                    anim.Play(animationName);
-                }
+                SetEventsActions(true);
+                PlayAnimation(1f);
             }
             else
                 log.Warning("Can only activate when deactivated!");
@@ -68,16 +58,8 @@ namespace ESLDCore
             {
                 activated = false;
                 ForceUpdateTechboxes();
-                techBoxStatus = techBoxModel + " Inactive.";
-                Events["TechBoxOn"].active = true;
-                Events["TechBoxOff"].active = false;
-                Actions["ActivateTBAction"].active = true;
-                Actions["DeactivateTBAction"].active = false;
-                if (anim != null)
-                {
-                    anim[animationName].normalizedSpeed = -1f;
-                    anim.Play(animationName);
-                }
+                SetEventsActions(false);
+                PlayAnimation(-1f);
             }
             else
                 log.Warning("Can only deactivate when activated!");
@@ -93,20 +75,10 @@ namespace ESLDCore
         }
         [KSPAction("Activate TechBox")]
         public void ActivateTBAction(KSPActionParam param)
-        {
-            if (!activated)
-                TechBoxOn();
-            else
-                log.Warning("Can only activate when deactivated!");
-        }
+            => TechBoxOn();
         [KSPAction("Deactivate TechBox")]
         public void DeactivateTBAction(KSPActionParam param)
-        {
-            if (activated)
-                TechBoxOff();
-            else
-                log.Warning("Can only deactivate when activated!");
-        }
+            => TechBoxOff();
 
         public override void OnStart(StartState state)
         {
@@ -133,26 +105,32 @@ namespace ESLDCore
                 }
             }
             if (alwaysActive)
-                TechBoxOn();
-            else if (activated)
             {
                 part.force_activate();
+                activated = true;
                 ForceUpdateTechboxes();
-                techBoxStatus = techBoxModel + " Active.";
-                Events["TechBoxOn"].active = false;
-                Events["TechBoxOff"].active = !alwaysActive;
-                Actions["ActivateTBAction"].active = false;
-                Actions["DeactivateTBAction"].active = !alwaysActive;
-                Actions["ToggleTBAction"].active = !alwaysActive;
-            }
-            else if (!activated)
-            {
-                techBoxStatus = techBoxModel + " Inactive.";
-                Events["TechBoxOn"].active = true;
+                SetEventsActions(true);
                 Events["TechBoxOff"].active = false;
-                Actions["ActivateTBAction"].active = true;
                 Actions["DeactivateTBAction"].active = false;
+                Actions["ToggleTBAction"].active = false;
+                PlayAnimation(1f);
             }
+        }
+
+        private void SetEventsActions(bool activated)
+        {
+            techBoxStatus = techBoxModel + (activated ? " Active." : " Inactive.");
+            Events["TechBoxOn"].active = !activated;
+            Events["TechBoxOff"].active = activated;
+            Actions["ActivateTBAction"].active = !activated;
+            Actions["DeactivateTBAction"].active = activated;
+        }
+
+        private void PlayAnimation(float speed)
+        {
+            if (anim == null) return;
+            anim[animationName].normalizedSpeed = speed;
+            anim.Play(animationName);
         }
 
         public override string GetInfo()

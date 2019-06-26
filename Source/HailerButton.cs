@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-//using System.Threading.Tasks;
 using UnityEngine;
 using KSP.UI.Screens;
 
@@ -11,13 +9,14 @@ namespace ESLDCore
     [KSPAddon(KSPAddon.Startup.Flight, false)]
     public class HailerButton : MonoBehaviour
     {
-        private ApplicationLauncherButton button;
+        public static HailerButton Instance;
+        public ApplicationLauncherButton button;
         private Vessel vessel;
         private ESLDHailer hailer;
-        private bool canHail = false;
+        public bool canHail = false;
         private Texture2D ESLDButtonOn = new Texture2D(38, 38, TextureFormat.ARGB32, false);
-        public FlightCamera mainCam = null;
-        public bool isDazzling = false;
+        private FlightCamera mainCam = null;
+        private bool isDazzling = false;
         private float currentFOV = 60;
         private float userFOV = 60;
         private float currentDistance = 1;
@@ -41,48 +40,13 @@ namespace ESLDCore
                     isDazzling = false;
                 }
             }
-            if (FlightGlobals.ActiveVessel != null) // Grab active vessel.
-            {
-                vessel = FlightGlobals.ActiveVessel;
-                if (vessel.FindPartModulesImplementing<ESLDHailer>().Count == 0) // Has a hailer?
-                {
-                    canHail = false;
-                    hailer = null;
-                }
-                else
-                {
-                    canHail = true;
-                    hailer = vessel.FindPartModulesImplementing<ESLDHailer>().First();
-                    foreach (ESLDHailer ehail in vessel.FindPartModulesImplementing<ESLDHailer>())
-                    {
-                        ehail.hailerButton = this;
-                    }
-                }
-            }
-            if (canHail && this.button == null)
-            {
-                OnGUIApplicationLauncherReady();
-            }
-            if (!canHail && this.button != null)
-            {
-                KillButton();
-            }
-            // Sync GUI & Button States
-            if (this.button != null)
-            {
-                if (this.button.toggleButton.CurrentState == KSP.UI.UIRadioButton.State.True && !hailer.guiopen)
-                {
-                    this.button.SetFalse();
-                }
-                if (this.button.toggleButton.CurrentState == KSP.UI.UIRadioButton.State.False && hailer.guiopen)
-                {
-                    this.button.SetTrue();
-                }
-            }
         }
 
         public void Awake()
         {
+            if (Instance != null)
+                Destroy(Instance);
+            Instance = this;
             //GameEvents.onGUIApplicationLauncherReady.Add(onGUIApplicationLauncherReady);
             GameEvents.onGameSceneLoadRequested.Add(OnSceneChangeRequest);
             GameEvents.onVesselChange.Add(OnVesselChange);
@@ -104,21 +68,12 @@ namespace ESLDCore
 
         private void OnTrue()
         {
-            if (hailer != null)
-            {
-                hailer.guiopen = true;
-                hailer.HailerActivate();
-                hailer.HailerGUIOpen();
-            }
+            OnVesselChange(FlightGlobals.ActiveVessel);
+            HailerGUI.ActivateGUI(FlightGlobals.ActiveVessel);
         }
 
         private void OnFalse()
-        {
-            if (hailer != null)
-            {
-                hailer.HailerDeactivate();
-            }
-        }
+            => HailerGUI.CloseAllGUIs();
 
 
         private void OnGUIApplicationLauncherReady()
@@ -142,17 +97,26 @@ namespace ESLDCore
         }
 
         public void OnSceneChangeRequest(GameScenes _scene)
-        {
-            KillButton();
-        }
+            => KillButton();
 
-        public void OnVesselChange(Vessel _vessel)
+        public void OnVesselChange(Vessel vessel)
         {
-            KillButton();
+            HailerGUI.CloseGUI(this.vessel);
+            this.vessel = vessel;
+
+            hailer = vessel?.FindPartModulesImplementing<ESLDHailer>().FirstOrDefault();
+
+            canHail = hailer != null;
+
+            if (canHail && button == null)
+                OnGUIApplicationLauncherReady();
+            else if (!canHail && button != null)
+                KillButton();
         }
 
         private void KillButton()
         {
+            HailerGUI.CloseAllGUIs();
             if (button != null && ApplicationLauncher.Instance != null)
             {
                 ApplicationLauncher.Instance.RemoveModApplication(button);
@@ -161,9 +125,7 @@ namespace ESLDCore
         }
 
         void OnGameSceneLoadRequestedForAppLauncher(GameScenes SceneToLoad)
-        {
-            KillButton();
-        }
+            => KillButton();
 
         // Warp Effect
         public void Dazzle()
@@ -176,5 +138,4 @@ namespace ESLDCore
             log.Debug("Messing with camera!");
         }
     }
-
 }
