@@ -49,6 +49,10 @@ namespace ESLDCore
         [KSPField]
         public float baseCost = 0;
 
+        // Cost multiplier. Applies to entire base jump cost.
+        [KSPField]
+        public float multiplier = 1;
+
         [KSPField]
         public float jumpPrecision = 10;
 
@@ -137,13 +141,13 @@ namespace ESLDCore
 
         // Calculate base cost in units of Karborundum before penalties for a transfer.
         public float GetTripBaseCost(float tripdist, float tonnage)
-            => ESLDBeacon.GetTripBaseCost(tripdist, tonnage, distPenalty, distPow, baseMult, massFctr, massExp, coef, baseCost, beaconModel);
+            => ESLDBeacon.GetTripBaseCost(tripdist, tonnage, distPenalty, distPow, baseMult, massFctr, massExp, coef, baseCost, beaconModel, multiplier);
 
         public float GetTripFinalCost(float baseCost, Vessel target, Vessel destination, float tonnage, List<Part> HCUParts = null)
-            => ESLDBeacon.GetTripFinalCost(baseCost, Vessel, target, destination, tonnage, hasSCU, hasAMU, hasHCU, HCUParts);
+            => ESLDBeacon.GetTripFinalCost(baseCost, Vessel, target, destination, tonnage, hasSCU, hasAMU, hasHCU, HCUParts, multiplier);
 
         public List<string> GetCostModifiers(Vessel target, Vessel destination, float tonnage, List<Part> HCUParts = null)
-            => ESLDBeacon.GetCostModifiers(Vessel, target, destination, tonnage, hasSCU, hasAMU, hasHCU, jumpResources, HCUParts);
+            => ESLDBeacon.GetCostModifiers(Vessel, target, destination, tonnage, hasSCU, hasAMU, hasHCU, jumpResources, HCUParts, multiplier);
 
         public float GetCrewBonuses(string neededTrait, float maxBenefit, int countCap)
             => ESLDBeacon.GetCrewBonuses(Vessel, neededTrait, maxBenefit, countCap);

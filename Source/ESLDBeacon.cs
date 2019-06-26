@@ -67,6 +67,10 @@ namespace ESLDCore
         [KSPField]
         public float baseCost = 0;
 
+        // Cost multiplier. Applies to entire base jump cost.
+        [KSPField]
+        public float multiplier = 1;
+
         [KSPField]
         public float jumpPrecision = 10;
 
@@ -316,8 +320,8 @@ namespace ESLDCore
         
         // Calculate base cost in units of Karborundum before penalties for a transfer.
         public float GetTripBaseCost(float tripdist, float tonnage)
-            => GetTripBaseCost(tripdist, tonnage, distPenalty, distPow, baseMult, massFctr, massExp, coef, baseCost, beaconModel);
-        public static float GetTripBaseCost(float tripdist, float tonnage, float distPenalty, float distPow, float baseMult, float massFctr, float massExp, float coef, float baseCost, string beaconModel = "")
+            => GetTripBaseCost(tripdist, tonnage, distPenalty, distPow, baseMult, massFctr, massExp, coef, baseCost, beaconModel, multiplier);
+        public static float GetTripBaseCost(float tripdist, float tonnage, float distPenalty, float distPow, float baseMult, float massFctr, float massExp, float coef, float baseCost, string beaconModel = "", float multiplier = 1)
         {
             float yardstick = Mathf.Pow(13599840256, 1 / (distPow + 1)); //Math.Sqrt(Math.Sqrt(13599840256));
             float distPenaltyCost = 0;
@@ -330,18 +334,18 @@ namespace ESLDCore
                     massExp = 1f;
                     baseMult = 0f;
                     distPenalty = 0;
-                    return ((((Mathf.Pow(tonnage, 1 + (tonnage / 6000)) * 0.9f) / 10) * ((Mathf.Sqrt(Mathf.Sqrt(tripdist + 2E11f))) / yardstick) / tonnage * 10000) * tonnage / 2000);
+                    return ((((Mathf.Pow(tonnage, 1 + (tonnage / 6000)) * 0.9f) / 10) * ((Mathf.Sqrt(Mathf.Sqrt(tripdist + 2E11f))) / yardstick) / tonnage * 10000) * tonnage / 2000) * multiplier;
                 default:
                     if ((distPenalty > 0) && (tripdist > distPenalty))
                         distPenaltyCost = 2;
                     yardstick = Mathf.Pow(13599840256, 1 / Mathf.Pow(2, distPow + 1)); //Math.Sqrt(Math.Sqrt(13599840256));
-                    return tonnage * baseMult + Mathf.Pow(tonnage, 1 + massFctr * Mathf.Pow(tonnage, massExp) + distPenaltyCost) * Mathf.Pow(tripdist, 1 / Mathf.Pow(2, distPow)) * coef / yardstick + baseCost;
+                    return (tonnage * baseMult + Mathf.Pow(tonnage, 1 + massFctr * Mathf.Pow(tonnage, massExp) + distPenaltyCost) * Mathf.Pow(tripdist, 1 / Mathf.Pow(2, distPow)) * coef / yardstick + baseCost) * multiplier;
             }
         }
 
         public float GetTripFinalCost(float baseCost, Vessel target, Vessel destination, float tonnage, List<Part> HCUParts = null)
-            => GetTripFinalCost(baseCost, vessel, target, destination, tonnage, hasSCU, hasAMU, hasHCU, HCUParts);
-        public static float GetTripFinalCost(float baseCost, Vessel beacon, Vessel target, Vessel destination, float tonnage, bool hasSCU, bool hasAMU, bool hasHCU, List<Part> HCUParts = null)
+            => GetTripFinalCost(baseCost, vessel, target, destination, tonnage, hasSCU, hasAMU, hasHCU, HCUParts, multiplier);
+        public static float GetTripFinalCost(float baseCost, Vessel beacon, Vessel target, Vessel destination, float tonnage, bool hasSCU, bool hasAMU, bool hasHCU, List<Part> HCUParts = null, float multiplier = 1)
         {
             float cost = baseCost;
             if (hasSCU)
@@ -352,9 +356,9 @@ namespace ESLDCore
             float driftpenalty = GetDriftPenalty(distance, relVel, GetCrewBonuses(target, "Pilot", 0.5f, 5));
             cost += cost * (driftpenalty * 0.01f);
             if (hasAMU)
-                cost += GetAMUCost(target, destination, tonnage);
+                cost += GetAMUCost(target, destination, tonnage, multiplier);
             if (hasHCU)
-                cost += GetHCUCost(target, HCUParts);
+                cost += GetHCUCost(target, HCUParts, multiplier);
             return cost;
         }
 
@@ -367,8 +371,8 @@ namespace ESLDCore
         }
 
         public List<string> GetCostModifiers(Vessel target, Vessel destination, float tonnage, List<Part> HCUParts = null)
-            => GetCostModifiers(vessel, target, destination, tonnage, hasSCU, hasAMU, hasHCU, jumpResources, HCUParts);
-        public static List<string> GetCostModifiers(Vessel beacon, Vessel target, Vessel destination, float tonnage, bool hasSCU, bool hasAMU, bool hasHCU, List<ESLDJumpResource> jumpResources, List<Part> HCUParts = null)
+            => GetCostModifiers(vessel, target, destination, tonnage, hasSCU, hasAMU, hasHCU, jumpResources, HCUParts, multiplier);
+        public static List<string> GetCostModifiers(Vessel beacon, Vessel target, Vessel destination, float tonnage, bool hasSCU, bool hasAMU, bool hasHCU, List<ESLDJumpResource> jumpResources, List<Part> HCUParts = null, float multiplier = 1)
         {
             List<string> modifiers = new List<string>();
             if (hasSCU)
@@ -384,7 +388,7 @@ namespace ESLDCore
             if (hasAMU)
             {
                 string amuStr = "AMU Compensation adds ";
-                float AMUCost = GetAMUCost(target, destination, tonnage);
+                float AMUCost = GetAMUCost(target, destination, tonnage, multiplier);
                 for (int i = 0; i < jumpResources.Count; i++)
                 {
                     amuStr += String.Format("{0:F2} {1}{2}", AMUCost * jumpResources[i].ratio, jumpResources[i].name, i + 1 < jumpResources.Count ? ", " : "");
@@ -394,7 +398,7 @@ namespace ESLDCore
             if (hasHCU)
             {
                 string hcuStr = "HCU Shielding adds ";
-                float HCUCost = GetHCUCost(target, HCUParts);
+                float HCUCost = GetHCUCost(target, HCUParts, multiplier);
                 for (int i = 0; i < jumpResources.Count; i++)
                 {
                     hcuStr += String.Format("{0:F2} {1}{2}", HCUCost * jumpResources[i].ratio, jumpResources[i].name, i + 1 < jumpResources.Count ? ", " : "");
@@ -405,14 +409,14 @@ namespace ESLDCore
         }
 
         // Calculate AMU cost in units of Karborundum given two vessel endpoints and the tonnage of the transferring vessel.
-        public static float GetAMUCost(Vessel near, Vessel far, float tton)
+        public static float GetAMUCost(Vessel near, Vessel far, float tton, float multiplier)
         {
             Vector3 velDiff = GetJumpVelOffset(near, far) - far.orbit.vel;
             float comp = velDiff.magnitude;
-            return ((comp * tton) / Mathf.Pow(Mathf.Log10(comp * tton), 2)) / 2 / 100;
+            return ((comp * tton) / Mathf.Pow(Mathf.Log10(comp * tton), 2)) / 2 / 100 * multiplier;
         }
 
-        public static float GetHCUCost(Vessel vessel, IEnumerable<Part> HCUParts = null)
+        public static float GetHCUCost(Vessel vessel, IEnumerable<Part> HCUParts = null, float multiplier =  1)
         {
             float HCUCost = 0;
             if (HCUParts == null)
@@ -428,7 +432,7 @@ namespace ESLDCore
                 }
             }
             HCUCost += vessel.GetCrewCount() * 0.9f / 1.13f;
-            return HCUCost;
+            return HCUCost * multiplier;
         }
 
         // Calculate how far away from a beacon the ship will arrive.
