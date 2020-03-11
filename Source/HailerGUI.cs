@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using UnityEngine;
+using ClickThroughFix;
 
 namespace ESLDCore
 {
@@ -77,10 +78,10 @@ namespace ESLDCore
             switch (displayMode)
             {
                 case DisplayMode.Selection:
-                    window = GUILayout.Window(this.GetInstanceID(), window, WindowInterface, "Warp Information", HighLogic.Skin.window, GUILayout.MinWidth(400), GUILayout.MinHeight(200));
+                    window = ClickThruBlocker.GUILayoutWindow(this.GetInstanceID(), window, WindowInterface, "Warp Information", HighLogic.Skin.window, GUILayout.MinWidth(400), GUILayout.MinHeight(200));
                     break;
                 case DisplayMode.Confirmation:
-                    window = GUILayout.Window(this.GetInstanceID(), window, WindowInterface, "Warp Information", HighLogic.Skin.window, GUILayout.MinWidth(400), GUILayout.MinHeight(200));
+                    window = ClickThruBlocker.GUILayoutWindow(this.GetInstanceID(), window, WindowInterface, "Warp Information", HighLogic.Skin.window, GUILayout.MinWidth(400), GUILayout.MinHeight(200));
                     break;
             }
         }
@@ -412,7 +413,8 @@ namespace ESLDCore
             Destroy(predictionGameObject);
             openWindows.Remove(this);
             if (openWindows.Count == 0)
-                HailerButton.Instance.button.SetFalse(false);
+                HailerButton.Instance.toolbarControl.SetFalse(false);
+                //HailerButton.Instance.button.SetFalse(false);
         }
 
         public void VesselDestroyed(Vessel vessel)

@@ -16,7 +16,7 @@ namespace BeaconCommNet.CommNetLayer
         Dictionary<CommNode, double> distanceOffsets = new Dictionary<CommNode, double>();
         public BeaconCommNetwork()
         {
-            this.realNet = CommNetManagerChecker.GetCommNetManagerNetwork();
+            //this.realNet = CommNetManagerChecker.GetCommNetManagerNetwork();
         }
         /// <summary>
         /// Edit the connectivity between two potential nodes

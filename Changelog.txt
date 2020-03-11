@@ -1,0 +1,10 @@
+Changelog
+
+1.2.1
+	Adoption by Linuxgurugamer
+	Rebuild for KSP 1.8.x and newer
+	Replaced button code with ToolbarController
+	Added support for the Clickthrough blocker
+	Fixed harmless nullrefs which were happening during load
+	Fixed bad texture references in three beacon parts files
+	Fixed mesh reference for the IB1 part

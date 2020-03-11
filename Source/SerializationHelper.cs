@@ -2,6 +2,9 @@
 using System.Collections.Generic;
 using System.Linq;
 
+using UnityEngine;
+
+
 namespace ESLDCore
 {
     public static class SerializationHelper
@@ -12,6 +15,10 @@ namespace ESLDCore
         }
         public static List<T> LoadObjects<T>(this PartModule partModule, string nodeName, ConfigNode saveNode, string identifierKey = "name", bool removeUnsaved = false) where T : class, IConfigNode, new()
         {
+            if (partModule == null || partModule.part == null ||
+                partModule.part.partInfo == null || partModule.part.partInfo.partConfig == null)
+                return new List<T>(); ;
+
             return LoadObjects<T>(nodeName, saveNode, partModule.part.partInfo.partConfig.GetNodes("MODULE", "name", partModule.GetType().Name)[0], identifierKey, removeUnsaved);
         }
 

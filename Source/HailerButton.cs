@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using KSP.UI.Screens;
+using ToolbarControl_NS;
 
 namespace ESLDCore
 {
@@ -10,11 +11,13 @@ namespace ESLDCore
     public class HailerButton : MonoBehaviour
     {
         public static HailerButton Instance;
-        public ApplicationLauncherButton button;
+        //public ApplicationLauncherButton button;
+        internal ToolbarControl toolbarControl;
+
         private Vessel vessel;
         private ESLDHailer hailer;
         public bool canHail = false;
-        private Texture2D ESLDButtonOn = new Texture2D(38, 38, TextureFormat.ARGB32, false);
+       // private Texture2D ESLDButtonOn = new Texture2D(38, 38, TextureFormat.ARGB32, false);
         private FlightCamera mainCam = null;
         private bool isDazzling = false;
         private float currentFOV = 60;
@@ -51,19 +54,20 @@ namespace ESLDCore
             GameEvents.onGameSceneLoadRequested.Add(OnSceneChangeRequest);
             GameEvents.onVesselChange.Add(OnVesselChange);
             GameEvents.onGUIApplicationLauncherDestroyed.Add(KillButton);
-            ESLDButtonOn = GameDatabase.Instance.GetTexture("ESLDBeacons/Textures/launcher", false);
-            GameEvents.onGameSceneLoadRequested.Add(OnGameSceneLoadRequestedForAppLauncher);
+            //ESLDButtonOn = GameDatabase.Instance.GetTexture("ESLDBeacons/Textures/launcher", false);
+            //GameEvents.onGameSceneLoadRequested.Add(OnGameSceneLoadRequestedForAppLauncher);
             mainCam = FlightCamera.fetch;
+            InitializeButton();
         }
 
         public void OnDestroy()
         {
-            GameEvents.onGUIApplicationLauncherReady.Remove(OnGUIApplicationLauncherReady);
+           // GameEvents.onGUIApplicationLauncherReady.Remove(OnGUIApplicationLauncherReady);
             GameEvents.onGameSceneLoadRequested.Remove(OnSceneChangeRequest);
             GameEvents.onVesselChange.Remove(OnVesselChange);
             GameEvents.onGUIApplicationLauncherDestroyed.Remove(KillButton);
             KillButton();
-            GameEvents.onGameSceneLoadRequested.Remove(OnGameSceneLoadRequestedForAppLauncher);
+            //GameEvents.onGameSceneLoadRequested.Remove(OnGameSceneLoadRequestedForAppLauncher);
         }
 
         private void OnTrue()
@@ -76,8 +80,11 @@ namespace ESLDCore
             => HailerGUI.CloseAllGUIs();
 
 
-        private void OnGUIApplicationLauncherReady()
+        internal const string MODID = "esld_NS";
+        internal const string MODNAME = "ESLDBeacon";
+        private void InitializeButton()
         {
+#if false
             if (this.button != null)
             {
                 KillButton();
@@ -94,6 +101,20 @@ namespace ESLDCore
                     ApplicationLauncher.AppScenes.FLIGHT | ApplicationLauncher.AppScenes.MAPVIEW,
                     ESLDButtonOn);
             }
+#endif
+            if (toolbarControl == null)
+            {
+                toolbarControl = gameObject.AddComponent<ToolbarControl>();
+                toolbarControl.AddToAllToolbars(this.OnTrue,
+                        this.OnFalse,
+                   ApplicationLauncher.AppScenes.FLIGHT | ApplicationLauncher.AppScenes.MAPVIEW,
+                    MODID,
+                    "esldButton",
+                    "ESLDBeacons/PluginData/Textures/launcher-38",
+                    "ESLDBeacons/PluginData/Textures/launcher-24",
+                    MODNAME
+                );
+            }        
         }
 
         public void OnSceneChangeRequest(GameScenes _scene)
@@ -107,21 +128,27 @@ namespace ESLDCore
             hailer = vessel?.FindPartModulesImplementing<ESLDHailer>().FirstOrDefault();
 
             canHail = hailer != null;
-
+#if false
             if (canHail && button == null)
                 OnGUIApplicationLauncherReady();
             else if (!canHail && button != null)
                 KillButton();
+#endif
+            toolbarControl.Enabled = canHail;
         }
 
         private void KillButton()
         {
             HailerGUI.CloseAllGUIs();
+            toolbarControl.OnDestroy();
+            Destroy(toolbarControl);
+#if false
             if (button != null && ApplicationLauncher.Instance != null)
             {
                 ApplicationLauncher.Instance.RemoveModApplication(button);
                 button = null;
             }
+#endif
         }
 
         void OnGameSceneLoadRequestedForAppLauncher(GameScenes SceneToLoad)

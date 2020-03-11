@@ -162,7 +162,9 @@ namespace ESLDCore
         public override void OnLoad(ConfigNode node)
         {
             base.OnLoad(node);
-
+            if (this.part == null) return;
+            log.Info("RnodeName: " + RnodeName);
+            log.Info("node: " + node.ToString());
             jumpResources = SerializationHelper.LoadObjects<ESLDJumpResource>(this, RnodeName, node);
 
             if (!node.HasValue("gLimitEff"))
