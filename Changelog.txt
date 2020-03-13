@@ -1,10 +1,18 @@
 Changelog
 
-1.2.1
+1.3.0
 	Adoption by Linuxgurugamer
+	Decompiled latest release and merged changes (source not uploaded to github)
 	Rebuild for KSP 1.8.x and newer
 	Replaced button code with ToolbarController
 	Added support for the Clickthrough blocker
+	Moved button textures into PluginData
+	Made 24x24 button texture
 	Fixed harmless nullrefs which were happening during load
 	Fixed bad texture references in three beacon parts files
-	Fixed mesh reference for the IB1 part
+	Fixed bad texture references in four Techboxes parts
+	Fixed mesh reference for the IB1 part (cfg name: ESLD_IB-1)
+	Reformatted all part cfg files
+	Refirnatted Agents.cfg
+	Added conditionalAttribute to Logger.Info & removed the #if DEBUG
+	Moved standard MM patches into MM_Patches folder

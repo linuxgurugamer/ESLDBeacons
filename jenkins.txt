@@ -31,7 +31,8 @@
 1:ESLDBeacons, ESLD.version
 
 # 2:PROJNAME, PROJFILE, VERSIONFILE, PLUGINSFOLDER
-2:ESLDBeacons,Source/ESLDBeacons.csproj,ESLD.version,GameData/ESLDBeacons/Plugins
+2:ESLDBeacons,ESLDCore/ESLDCore.csproj,ESLD.version,GameData/ESLDBeacons/Plugins
+2:ESLDBeacons,BeaconCommNet/BeaconCommNet.csproj,ESLD.version,GameData/ESLDBeacons/Plugins
 
 # 3:SOURCEFILE, DESTDIR
 3:ESLD.version,GameData/ESLDBeacons

@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.29728.190
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ESLDBeacons", "Source\ESLDBeacons.csproj", "{044A3468-F04A-41A8-A958-A35DA7952634}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ESLDCore", "ESLDCore\ESLDCore.csproj", "{044A3468-F04A-41A8-A958-A35DA7952634}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{8CB70D0C-DCDC-4A5B-8E8D-4DC902DA9C98}"
 	ProjectSection(SolutionItems) = preProject
@@ -16,6 +16,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		README.md = README.md
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BeaconCommNet", "BeaconCommNet\BeaconCommNet.csproj", "{B1C8EBC1-A03D-4C7C-8FD7-2329E42E880C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -26,6 +28,10 @@ Global
 		{044A3468-F04A-41A8-A958-A35DA7952634}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{044A3468-F04A-41A8-A958-A35DA7952634}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{044A3468-F04A-41A8-A958-A35DA7952634}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B1C8EBC1-A03D-4C7C-8FD7-2329E42E880C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B1C8EBC1-A03D-4C7C-8FD7-2329E42E880C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B1C8EBC1-A03D-4C7C-8FD7-2329E42E880C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B1C8EBC1-A03D-4C7C-8FD7-2329E42E880C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

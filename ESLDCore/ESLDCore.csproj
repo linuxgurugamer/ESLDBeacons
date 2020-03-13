@@ -8,10 +8,11 @@
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>ESLDBeacons</RootNamespace>
-    <AssemblyName>ESLDBeacons</AssemblyName>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <AssemblyName>ESLDCore</AssemblyName>
+    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -40,6 +41,9 @@
     <Reference Include="ClickThroughBlocker">
       <HintPath>R:\KSP_1.8.1_dev\GameData\000_ClickThroughBlocker\Plugins\ClickThroughBlocker.dll</HintPath>
     </Reference>
+    <Reference Include="CommNetManager">
+      <HintPath>R:\KSP_1.8.1_dev\GameData\CommNetManager\CommNetManager.dll</HintPath>
+    </Reference>
     <Reference Include="CommNetManagerAPI, Version=0.0.0.4, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>R:\KSP_1.8.1_dev\GameData\CommNetManager\CommNetManagerAPI.dll</HintPath>
@@ -55,19 +59,19 @@
       <DesignTime>True</DesignTime>
       <DependentUpon>AssemblyVersion.tt</DependentUpon>
     </Compile>
-    <Compile Include="BeaconCommNet\BeaconCommNetNetwork.cs" />
-    <Compile Include="BeaconCommNet\BeaconCommNetScenario.cs" />
-    <Compile Include="BeaconCommNet\BeaconCommNetwork.cs" />
     <Compile Include="ESLDBeacon.cs" />
     <Compile Include="ESLDHailer.cs" />
+    <Compile Include="ESLDJumpResource.cs" />
     <Compile Include="ESLDTechbox.cs" />
     <Compile Include="HailerButton.cs" />
     <Compile Include="HailerGUI.cs" />
+    <Compile Include="IBeacon.cs" />
     <Compile Include="InstallChecker.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="ProtoBeacon.cs" />
     <Compile Include="SerializationHelper.cs" />
+    <Compile Include="Settings.cs" />
     <Compile Include="ToolbarRegistration.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -75,8 +79,6 @@
       <Generator>TextTemplatingFileGenerator</Generator>
       <LastGenOutput>AssemblyVersion.cs</LastGenOutput>
     </Content>
-    <Content Include="BeaconCommNet\CommNetManagerAPI Distribution\CommNetManagerAPI.dll" />
-    <Content Include="BeaconCommNet\CommNetManagerAPI Distribution\CommNetManagerAPI.xml" />
   </ItemGroup>
   <ItemGroup>
     <Service Include="{508349B6-6B84-4DF5-91F0-309BEEBAD82D}" />
