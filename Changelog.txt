@@ -16,3 +16,4 @@ Changelog
 	Refirnatted Agents.cfg
 	Added conditionalAttribute to Logger.Info & removed the #if DEBUG
 	Moved standard MM patches into MM_Patches folder
+	Added dependency lines for both dlls.  Eliminates the need to include the CommNetManagerAPI.dll
