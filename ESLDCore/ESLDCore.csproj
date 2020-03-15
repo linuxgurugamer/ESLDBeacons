@@ -41,13 +41,6 @@
     <Reference Include="ClickThroughBlocker">
       <HintPath>R:\KSP_1.8.1_dev\GameData\000_ClickThroughBlocker\Plugins\ClickThroughBlocker.dll</HintPath>
     </Reference>
-    <Reference Include="CommNetManager">
-      <HintPath>R:\KSP_1.8.1_dev\GameData\CommNetManager\CommNetManager.dll</HintPath>
-    </Reference>
-    <Reference Include="CommNetManagerAPI, Version=0.0.0.4, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>R:\KSP_1.8.1_dev\GameData\CommNetManager\CommNetManagerAPI.dll</HintPath>
-    </Reference>
     <Reference Include="System" />
     <Reference Include="ToolbarControl">
       <HintPath>R:\KSP_1.8.1_dev\GameData\001_ToolbarControl\Plugins\ToolbarControl.dll</HintPath>

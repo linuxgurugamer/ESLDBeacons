@@ -124,6 +124,9 @@ namespace ESLDCore
 				base.Actions["DeactivateTBAction"].active = false;
 				base.Actions["ToggleTBAction"].active = false;
 				PlayAnimation(1f);
+			} else
+			{
+				SetEventsActions(activated);					
 			}
 		}
 

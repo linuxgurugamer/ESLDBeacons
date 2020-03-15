@@ -1,5 +1,8 @@
 Changelog
 
+1.3.0.1
+	Fixed reloading a vessel with an activated addon module having PAW set to "activate"
+
 1.3.0
 	Adoption by Linuxgurugamer
 	Decompiled latest release and merged changes (source not uploaded to github)
@@ -17,3 +20,4 @@ Changelog
 	Added conditionalAttribute to Logger.Info & removed the #if DEBUG
 	Moved standard MM patches into MM_Patches folder
 	Added dependency lines for both dlls.  Eliminates the need to include the CommNetManagerAPI.dll
+

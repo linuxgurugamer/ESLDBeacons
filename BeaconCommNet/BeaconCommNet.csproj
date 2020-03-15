@@ -33,8 +33,11 @@
     <Reference Include="$(KSPDIR)\KSP_x64_Data\Managed\UnityEngine*.dll">
       <Private>False</Private>
     </Reference>
+    <Reference Include="CommNetManager">
+      <HintPath>R:\KSP_1.8.1_dev\GameData\CommNetManager\Plugins\CommNetManager.dll</HintPath>
+    </Reference>
     <Reference Include="CommNetManagerAPI">
-      <HintPath>R:\KSP_1.8.1_dev\GameData\CommNetManager\CommNetManagerAPI.dll</HintPath>
+      <HintPath>R:\KSP_1.8.1_dev\GameData\CommNetManager\Plugins\CommNetManagerAPI.dll</HintPath>
     </Reference>
     <Reference Include="System" />
   </ItemGroup>
